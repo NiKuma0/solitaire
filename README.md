@@ -3,7 +3,9 @@
 A minimalist, open-source Klondike solitaire. No ads, no tracking, no network,
 no accounts, no permissions. One Rust codebase for the web, desktop and Android.
 
-> Status: early development (milestone M0 — project skeleton).
+> Status: early development. Game logic is done (M1); the playable table comes next.
+
+Web demo: https://nikuma0.github.io/solitaire/
 
 ## Layout
 

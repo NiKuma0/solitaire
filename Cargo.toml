@@ -8,6 +8,7 @@ edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
 authors = ["Solitaire contributors"]
+repository = "https://github.com/NiKuma0/solitaire"
 publish = false
 
 [workspace.dependencies]
