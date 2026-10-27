@@ -210,3 +210,11 @@ fn shadows_are_faint() {
         assert!(a > 0.0 && a <= 0.4, "{theme:?}: {a}");
     }
 }
+
+#[test]
+fn swatches_show_a_themes_background_and_accent() {
+    for theme in ThemeId::ALL {
+        let p = palette(theme);
+        assert_eq!(super::swatch(theme), (p.bg, p.accent), "{theme:?}");
+    }
+}

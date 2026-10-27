@@ -34,6 +34,7 @@ impl Drag {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     OpenSettings,
+    OpenThemes,
     /// A tapped card had nowhere to go.
     Rejected(Card),
     NewGame,
@@ -153,7 +154,7 @@ impl Table {
     #[must_use]
     pub fn is_enabled(&self, button: Button) -> bool {
         match button {
-            Button::New | Button::Settings => true,
+            Button::New | Button::Settings | Button::Theme => true,
             // A win is final: no taking it back.
             Button::Undo => self.game.can_undo() && !self.game.is_won(),
             Button::Redo => self.game.can_redo() && !self.game.is_won(),
@@ -168,6 +169,10 @@ impl Table {
         match button {
             Button::Settings => {
                 self.events.push(Event::OpenSettings);
+                return;
+            }
+            Button::Theme => {
+                self.events.push(Event::OpenThemes);
                 return;
             }
             Button::New => {

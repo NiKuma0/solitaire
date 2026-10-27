@@ -52,6 +52,7 @@ impl Icon {
             Button::Redo => Self::Redo,
             Button::AutoComplete => Self::Auto,
             Button::Settings => Self::Menu,
+            Button::Theme => Self::Palette,
         }
     }
 }

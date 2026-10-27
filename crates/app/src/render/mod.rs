@@ -8,8 +8,9 @@ pub mod suit;
 mod text;
 pub mod widgets;
 
+use macroquad::camera::set_default_camera;
 use macroquad::math::{Rect, Vec2, vec2};
-use macroquad::shapes::draw_rectangle;
+use macroquad::shapes::{draw_circle, draw_rectangle};
 use macroquad::window::clear_background;
 use solitaire_core::PileId;
 
@@ -17,13 +18,14 @@ use crate::app::App;
 use crate::feedback::Target;
 use crate::fonts::Fonts;
 use crate::layout::{Button, Layout};
+use crate::picker::PickerLayout;
 use crate::scene::{Placement, placements};
 use crate::settings::Settings;
 use crate::table::Table;
-use crate::theme::{Palette, faded};
+use crate::theme::{Palette, ThemeId, faded, mix, swatch};
 use card::{draw_back, draw_count, draw_face, draw_plate, draw_slot};
-use icon::Icon;
-use shapes::stroke_circle;
+use icon::{Icon, icon_shapes};
+use shapes::{clip_to, fill_shapes, stroke_circle, stroke_rounded};
 use text::{Align, draw_label};
 use widgets::{SELECTED, draw_icon_button, draw_pill};
 
@@ -164,9 +166,43 @@ fn draw_bars(app: &App, now: f64, ctx: &Ctx) {
     let table = app.table();
     let l = table.layout();
     let p = &ctx.palette;
+    let picker = app.picker().map_or(0.0, |picker| picker.progress(now));
+    if picker > 0.0 {
+        draw_picker(app, picker, ctx);
+    }
+    let center = l.status.center();
+    // The open picker covers the menu and the score.
+    let shown = |b: Button| picker <= 0.0 || !matches!(b, Button::Settings);
+    if picker <= 0.0 {
+        draw_status(app, center, ctx);
+    }
+    for &(button, rect) in l.buttons.iter().filter(|(b, _)| shown(*b)) {
+        let enabled = table.is_enabled(button);
+        let level = app.feedback(Target::Button(button), now);
+        if button == Button::AutoComplete {
+            // Only shown when it can be used.
+            if enabled {
+                draw_pill(rect, "Finish", SELECTED.max(level), ctx);
+            }
+        } else if button == Button::Theme && picker > 0.0 {
+            // The button turns into an accent disc while the picker is out.
+            let c = rect.center();
+            draw_circle(c.x, c.y, PICKER_DISC, faded(p.accent, picker));
+            let color = mix(p.text, p.bg, picker);
+            fill_shapes(&icon_shapes(Icon::Palette, c, ICON), color);
+        } else {
+            let color = if enabled { p.text } else { p.disabled };
+            draw_icon_button(rect.center(), Icon::of(button), color, level, ctx);
+        }
+    }
+}
+
+/// Score, and the move count or a message under it.
+fn draw_status(app: &App, center: Vec2, ctx: &Ctx) {
+    let table = app.table();
+    let p = &ctx.palette;
     let board = table.game().board();
     let font = ctx.fonts.regular.as_ref();
-    let center = l.status.center();
     draw_label(
         &format!("Score {}", board.score),
         vec2(center.x, center.y - 8.0),
@@ -190,21 +226,49 @@ fn draw_bars(app: &App, now: f64, ctx: &Ctx) {
         Align::Center,
         font,
     );
+}
 
-    for &(button, rect) in &l.buttons {
-        let enabled = table.is_enabled(button);
-        let level = app.feedback(Target::Button(button), now);
-        if button == Button::AutoComplete {
-            // Only shown when it can be used.
-            if enabled {
-                draw_pill(rect, "Finish", SELECTED.max(level), ctx);
-            }
+/// The capsule of theme swatches, `t` of the way open from the palette button.
+fn draw_picker(app: &App, t: f32, ctx: &Ctx) {
+    let p = &ctx.palette;
+    let Some(picker) = app.picker() else { return };
+    let layout = PickerLayout::new(app.table().layout());
+    let c = layout.capsule;
+    let folded_x = layout.button.center().x - c.h / 2.0;
+    let x = folded_x + (c.x - folded_x) * t;
+    let capsule = Rect::new(x, c.y, c.right() - x, c.h);
+    stroke_rounded(capsule, c.h / 2.0, 1.0, faded(p.line, t));
+
+    let visible = Rect::new(
+        capsule.x.max(layout.area.x),
+        layout.area.y,
+        (layout.area.right() - capsule.x.max(layout.area.x)).max(0.0),
+        layout.area.h,
+    );
+    if visible.w <= 0.0 {
+        return;
+    }
+    clip_to(visible);
+    for (theme, r) in ThemeId::ALL.into_iter().zip(layout.swatches) {
+        let center = r.center() - vec2(picker.scroll, 0.0);
+        let (bg, accent) = swatch(theme);
+        if theme == app.settings().theme {
+            draw_circle(center.x, center.y, SWATCH_RING, accent);
+            draw_circle(center.x, center.y, SWATCH_RING - 2.5, bg);
         } else {
-            let color = if enabled { p.text } else { p.disabled };
-            draw_icon_button(rect.center(), Icon::of(button), color, level, ctx);
+            draw_circle(center.x, center.y, SWATCH, bg);
+            stroke_circle(center, SWATCH, 1.0, p.line);
+            draw_circle(center.x, center.y, SWATCH_DOT, accent);
         }
     }
+    set_default_camera();
 }
+
+const PICKER_DISC: f32 = 20.0;
+const ICON: f32 = 24.0;
+const SWATCH: f32 = 13.0;
+const SWATCH_RING: f32 = 17.0;
+const SWATCH_DOT: f32 = 6.0;
 
 fn draw_win(l: &Layout, score: u32, ctx: &Ctx) {
     let p = &ctx.palette;

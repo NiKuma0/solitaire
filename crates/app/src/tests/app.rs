@@ -8,6 +8,7 @@ use crate::feedback::Target;
 use crate::gesture::{DRAG_THRESHOLD, Gesture};
 use crate::layout::{Button, Insets};
 use crate::menu::{MenuHit, Row};
+use crate::picker::PickerLayout;
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
 use crate::theme::{ThemeId, palette};
@@ -467,4 +468,65 @@ fn tapping_a_menu_control_lights_it() {
         a.feedback(Target::Menu(MenuHit::Choose(Row::Draw, 1)), 2.0),
         1.0
     );
+}
+
+fn open_picker(a: &mut App, now: f64) -> PickerLayout {
+    let p = button(a, Button::Theme);
+    tap(a, p, now);
+    PickerLayout::new(a.table().layout())
+}
+
+#[test]
+fn palette_button_opens_and_closes_the_picker() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    assert!(a.picker().is_none());
+    let layout = open_picker(&mut a, 1.0);
+    assert!(a.picker().is_some_and(crate::picker::Picker::is_open));
+    tap(&mut a, layout.button.center(), 2.0);
+    assert!(a.picker().is_some_and(|p| !p.is_open()), "closing");
+    a.update(a.screen(), 3.0);
+    assert!(a.picker().is_none(), "gone after the animation");
+}
+
+#[test]
+fn tapping_a_swatch_applies_its_theme_and_keeps_the_picker_open() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let layout = open_picker(&mut a, 1.0);
+    tap(&mut a, layout.swatches[1].center(), 2.0);
+    assert_eq!(a.settings().theme, ThemeId::ALL[1]);
+    assert!(a.picker().is_some_and(crate::picker::Picker::is_open));
+    assert_eq!(a.palette(3.0), palette(ThemeId::ALL[1]));
+    let saved: Settings =
+        serde_json::from_str(&a.storage().get(persist::SETTINGS_KEY).expect("saved")).unwrap();
+    assert_eq!(saved.theme, ThemeId::ALL[1]);
+}
+
+#[test]
+fn tapping_outside_closes_the_picker_without_touching_the_cards() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    open_picker(&mut a, 1.0);
+    let before = a.table().game().board().clone();
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 2.0);
+    assert_eq!(a.table().game().board(), &before);
+    assert!(a.picker().is_some_and(|p| !p.is_open()));
+}
+
+#[test]
+fn dragging_the_swatches_scrolls_them() {
+    let mut a = app(360.0, 640.0, Settings::default());
+    let layout = open_picker(&mut a, 1.0);
+    let from = layout.swatches[2].center();
+    a.handle(
+        Gesture::DragStart {
+            origin: from,
+            at: from - vec2(DRAG_THRESHOLD + 1.0, 0.0),
+        },
+        2.0,
+    );
+    a.handle(Gesture::DragMove(from - vec2(500.0, 0.0)), 2.1);
+    a.handle(Gesture::Drop(from - vec2(500.0, 0.0)), 2.2);
+    let scroll = a.picker().map(|p| p.scroll).expect("open");
+    assert_eq!(scroll, layout.max_scroll(), "clamped");
+    assert!(a.picker().is_some_and(crate::picker::Picker::is_open));
 }

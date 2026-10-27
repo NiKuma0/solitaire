@@ -1,12 +1,11 @@
 //! The menu: statistics and settings tabs.
 
-use macroquad::camera::{Camera2D, set_camera, set_default_camera};
+use macroquad::camera::set_default_camera;
 use macroquad::math::{Rect, vec2};
 use macroquad::shapes::draw_rectangle;
-use macroquad::window::{screen_dpi_scale, screen_height};
 
 use super::Ctx;
-use super::shapes::{fill_rounded, stroke_rounded};
+use super::shapes::{clip_to, fill_rounded, stroke_rounded};
 use super::text::{Align, draw_label};
 use solitaire_core::DrawMode;
 
@@ -306,25 +305,4 @@ fn draw_chart(area: Rect, stats: &Stats, ctx: &Ctx) {
         let x = bars.x + slot * i as f32 + slot * 0.15;
         draw_rectangle(x, bars.bottom() - h, slot * 0.7, h, color);
     }
-}
-
-/// Limits drawing to `r` (logical pixels) while keeping screen coordinates.
-fn clip_to(r: Rect) {
-    let dpi = screen_dpi_scale();
-    let full_h = screen_height() * dpi;
-    // GL viewports count from the bottom-left corner in physical pixels.
-    let viewport = (
-        (r.x * dpi) as i32,
-        (full_h - r.bottom() * dpi) as i32,
-        (r.w * dpi) as i32,
-        (r.h * dpi) as i32,
-    );
-    let camera = Camera2D::from_display_rect(r);
-    // `from_display_rect` makes y grow upwards; flip it back to screen orientation.
-    let zoom = vec2(camera.zoom.x, -camera.zoom.y);
-    set_camera(&Camera2D {
-        viewport: Some(viewport),
-        zoom,
-        ..camera
-    });
 }

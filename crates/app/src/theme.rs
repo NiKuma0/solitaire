@@ -147,6 +147,13 @@ pub fn palette(theme: ThemeId) -> Palette {
     derive(rgb(bg), rgb(accent), text_ratio)
 }
 
+/// Background and accent of `theme`, for its swatch in the picker.
+#[must_use]
+pub const fn swatch(theme: ThemeId) -> (Color, Color) {
+    let (bg, accent) = theme.seed();
+    (rgb(bg), rgb(accent))
+}
+
 /// All tokens from a background and an accent; text reaches `text_ratio`.
 fn derive(bg: Color, accent: Color, text_ratio: f32) -> Palette {
     let dark = luminance(bg) < 0.2;

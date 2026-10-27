@@ -9,6 +9,7 @@ use crate::gesture::Gesture;
 use crate::layout::{Button, Insets};
 use crate::menu::{Menu, MenuHit, Row, Tab, apply};
 use crate::persist;
+use crate::picker::{Picker, PickerHit, PickerLayout};
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
 use crate::stats::{GameRecord, Stats};
@@ -70,6 +71,7 @@ pub struct App {
     last_tab: Tab,
     clock: f64,
     feedback: Feedback,
+    picker: Option<Picker>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,6 +179,7 @@ impl App {
             last_tab: Tab::Settings,
             clock: now,
             feedback: Feedback::default(),
+            picker: None,
         };
         app.update(screen, now);
         app
@@ -245,9 +248,17 @@ impl App {
         self.feedback.level(target, now)
     }
 
+    /// The theme picker, while it is open or closing.
+    #[must_use]
+    pub const fn picker(&self) -> Option<&Picker> {
+        self.picker.as_ref()
+    }
+
     pub fn handle(&mut self, gesture: Gesture, now: f64) {
         if self.menu.is_some() {
             self.handle_menu(gesture, now);
+        } else if self.picker.is_some_and(|p| p.is_open()) {
+            self.handle_picker(gesture, now);
         } else {
             if let Gesture::Tap(p) = gesture
                 && let Some(&(button, _)) = self
@@ -303,6 +314,9 @@ impl App {
                         confirm_reset_until: None,
                     });
                 }
+                Event::OpenThemes => {
+                    self.picker = Some(Picker::open(now, self.settings.animation));
+                }
                 Event::Rejected(card) => self.anim.shake(card, now, self.settings.animation),
                 Event::NewGame => {
                     self.cue = Cue::Deal;
@@ -331,6 +345,10 @@ impl App {
                     self.save_failed = result.is_err();
                 }
             }
+        }
+
+        if self.picker.is_some_and(|p| p.is_gone(now)) {
+            self.picker = None;
         }
 
         let won = self.table.game().is_won();
@@ -393,6 +411,43 @@ impl App {
             Gesture::Drop(p) => {
                 scroll_to(m, p.y);
                 m.drag_anchor = None;
+            }
+        }
+    }
+
+    /// Swatches pick a theme, drags scroll them, anything outside closes the picker.
+    fn handle_picker(&mut self, gesture: Gesture, now: f64) {
+        let layout = PickerLayout::new(self.table.layout());
+        let Some(picker) = &mut self.picker else {
+            return;
+        };
+        let scroll_to = |picker: &mut Picker, x: f32| {
+            if let Some((start_x, start_scroll)) = picker.drag_anchor {
+                picker.scroll = (start_scroll + start_x - x).clamp(0.0, layout.max_scroll());
+            }
+        };
+        match gesture {
+            Gesture::Tap(p) => match layout.hit(p, picker.scroll) {
+                Some(PickerHit::Swatch(i)) => {
+                    self.feedback
+                        .press(Target::Menu(MenuHit::Choose(Row::Theme, i)), now);
+                    self.change_setting(MenuHit::Choose(Row::Theme, i), now);
+                }
+                Some(PickerHit::Capsule) => {}
+                Some(PickerHit::Button) | None => picker.close(now),
+            },
+            Gesture::DragStart { origin, at } => {
+                if layout.capsule.contains(origin) {
+                    picker.drag_anchor = Some((origin.x, picker.scroll));
+                    scroll_to(picker, at.x);
+                } else {
+                    picker.close(now);
+                }
+            }
+            Gesture::DragMove(p) => scroll_to(picker, p.x),
+            Gesture::Drop(p) => {
+                scroll_to(picker, p.x);
+                picker.drag_anchor = None;
             }
         }
     }

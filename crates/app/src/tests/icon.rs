@@ -80,4 +80,5 @@ fn toolbar_buttons_have_icons() {
     assert_eq!(Icon::of(Button::Redo), Icon::Redo);
     assert_eq!(Icon::of(Button::AutoComplete), Icon::Auto);
     assert_eq!(Icon::of(Button::Settings), Icon::Menu);
+    assert_eq!(Icon::of(Button::Theme), Icon::Palette);
 }

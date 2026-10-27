@@ -60,6 +60,8 @@ pub enum Button {
     Redo,
     AutoComplete,
     Settings,
+    /// Opens the theme picker.
+    Theme,
 }
 
 /// Vertical spacing in one tableau column, compressed so it fits.
@@ -123,7 +125,7 @@ pub struct Layout {
     pub bottom: Rect,
     /// Header area between its icons, for the score and messages.
     pub status: Rect,
-    pub buttons: [(Button, Rect); 5],
+    pub buttons: [(Button, Rect); 6],
     /// "New game" on the win panel, centred on the table.
     pub win_button: Rect,
 }
@@ -279,15 +281,14 @@ impl Layout {
     }
 }
 
-/// Menu at the header's left; new, undo and redo spread over the bottom bar;
+/// Menu and theme picker at the header's ends; new, undo and redo spread over the bottom bar;
 /// auto-complete floating above it. The rest of the header is the status area.
-fn bar_buttons(header: Rect, bottom: Rect) -> ([(Button, Rect); 5], Rect) {
+fn bar_buttons(header: Rect, bottom: Rect) -> ([(Button, Rect); 6], Rect) {
     let at =
         |c: Vec2, size: Vec2| Rect::new(c.x - size.x / 2.0, c.y - size.y / 2.0, size.x, size.y);
-    let menu = at(
-        vec2(header.x + EDGE, header.center().y),
-        vec2(BUTTON.y, BUTTON.y),
-    );
+    let corner = vec2(BUTTON.y, BUTTON.y);
+    let menu = at(vec2(header.x + EDGE, header.center().y), corner);
+    let theme = at(vec2(header.right() - EDGE, header.center().y), corner);
     let third = bottom.w / 3.0;
     let bar = |k: f32| {
         at(
@@ -300,7 +301,7 @@ fn bar_buttons(header: Rect, bottom: Rect) -> ([(Button, Rect); 5], Rect) {
         AUTO_SIZE,
     );
     let status_x = menu.right() + 4.0;
-    // Symmetric, leaving the same room on the right for the theme picker.
+    // Symmetric: the theme button mirrors the menu.
     let status = Rect::new(
         status_x,
         header.y,
@@ -314,6 +315,7 @@ fn bar_buttons(header: Rect, bottom: Rect) -> ([(Button, Rect); 5], Rect) {
             (Button::Undo, bar(1.0)),
             (Button::Redo, bar(2.0)),
             (Button::AutoComplete, auto),
+            (Button::Theme, theme),
         ],
         status,
     )

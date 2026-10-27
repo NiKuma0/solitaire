@@ -379,3 +379,18 @@ fn large_cards_are_bigger_with_taller_steps() {
         assert!(large.large_cards && !normal.large_cards);
     }
 }
+
+#[test]
+fn theme_button_mirrors_the_menu_button() {
+    for (w, h) in SIZES {
+        let l = layout(w, h);
+        let menu = button_rect(&l, Button::Settings);
+        let theme = button_rect(&l, Button::Theme);
+        assert!(inside(l.header, theme), "{w}x{h}");
+        assert_eq!(menu.size(), theme.size());
+        let left = menu.center().x - l.header.x;
+        let right = l.header.right() - theme.center().x;
+        assert!((left - right).abs() < 0.01, "{w}x{h}");
+        assert!(theme.x >= l.status.right(), "right of the score");
+    }
+}
