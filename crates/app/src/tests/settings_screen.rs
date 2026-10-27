@@ -26,8 +26,6 @@ fn one_block_per_setting_in_order_going_down() {
     for pair in s.blocks.windows(2) {
         assert!(rect_of(&pair[0].control).bottom() < pair[1].name.y);
     }
-    let last = rect_of(&s.blocks[ROWS.len() - 1].control);
-    assert!(last.bottom() < s.about[0].y);
 }
 
 #[test]

@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod about;
 pub mod anim;
 pub mod app;
 pub mod app_icon;
@@ -23,6 +24,7 @@ pub mod scene;
 pub mod settings;
 pub mod settings_screen;
 pub mod stats;
+pub mod stats_screen;
 pub mod storage;
 pub mod table;
 pub mod theme;

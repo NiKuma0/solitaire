@@ -1,6 +1,7 @@
 //! Press feedback: whatever was tapped flashes in the accent and fades (SPEC §7.7).
 
 use crate::anim::ease_out_cubic;
+use crate::controls::Step;
 use crate::dialog::DialogHit;
 use crate::layout::Button;
 use crate::main_menu::MainHit;
@@ -18,6 +19,8 @@ pub enum Target {
     Dialog(DialogHit),
     Main(MainHit),
     Settings(SettingsHit),
+    /// The statistics filter's chevrons.
+    Stats(Step),
 }
 
 /// The last press; one flash at a time.

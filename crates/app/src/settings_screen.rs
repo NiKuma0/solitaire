@@ -1,11 +1,11 @@
 //! The settings screen: each setting's name, a short description and its control,
-//! in a scrolling column under the shared header. About closes the list.
+//! in a scrolling column under the shared header.
 
 use macroquad::math::{Rect, Vec2, vec2};
 
 use crate::controls::{Selector, Step};
 use crate::layout::Layout;
-use crate::menu::{ABOUT_LINES, Row};
+use crate::menu::Row;
 
 pub const TITLE: &str = "Settings";
 /// The settings on this screen, in order.
@@ -26,7 +26,6 @@ pub const TEXT_WIDTH: f32 = 300.0;
 pub const NAME_SIZE: f32 = 16.0;
 pub const DESCRIPTION_SIZE: f32 = 13.0;
 pub const DESCRIPTION_LINE: f32 = 17.0;
-pub const ABOUT_LINE: f32 = 22.0;
 const TOP: f32 = 28.0;
 /// Space kept between text and the screen's sides on narrow screens.
 const SIDE: f32 = 16.0;
@@ -70,8 +69,6 @@ pub struct Block {
 pub struct SettingsScreen {
     pub title: Vec2,
     pub blocks: Vec<Block>,
-    /// Centres of the about lines.
-    pub about: Vec<Vec2>,
     /// Below the header: where the content scrolls.
     pub viewport: Rect,
     bottom: f32,
@@ -122,14 +119,10 @@ impl SettingsScreen {
             })
             .collect();
 
-        let about = (0..ABOUT_LINES.len())
-            .map(|i| vec2(cx, y + ABOUT_LINE * (i as f32 + 0.5)))
-            .collect();
-        y += ABOUT_LINE * ABOUT_LINES.len() as f32 + BOTTOM;
+        y += BOTTOM - GAPS[3];
         Self {
             title,
             blocks,
-            about,
             viewport: Rect::new(0.0, top, layout.screen.x, (layout.screen.y - top).max(0.0)),
             bottom: y,
         }

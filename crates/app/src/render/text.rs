@@ -9,6 +9,8 @@ use macroquad::window::screen_dpi_scale;
 pub enum Align {
     Left,
     Center,
+    /// `at.x` is the right edge.
+    Right,
 }
 
 /// Pixel size to rasterize glyphs at and the scale that draws them at `size`
@@ -63,6 +65,7 @@ pub fn draw_label_top(
     let x = match align {
         Align::Left => at.x,
         Align::Center => at.x - dims.width / 2.0,
+        Align::Right => at.x - dims.width,
     };
     let params = TextParams {
         font,

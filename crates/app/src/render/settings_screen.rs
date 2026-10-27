@@ -11,13 +11,12 @@ use super::widgets::{SELECTED, draw_pill, draw_selector, draw_toggle};
 use crate::app::App;
 use crate::controls::Step;
 use crate::feedback::Target;
-use crate::menu::{ABOUT_LINES, Row, selected};
+use crate::menu::{Row, selected};
 use crate::settings_screen::{
     Control, DESCRIPTION_SIZE, NAME_SIZE, SettingsHit, SettingsScreen, TITLE,
 };
 
 const TITLE_SIZE: f32 = 24.0;
-const ABOUT_SIZE: f32 = 14.0;
 
 pub fn draw(app: &App, picker: f32, now: f64, ctx: &Ctx) {
     let p = &ctx.palette;
@@ -95,10 +94,6 @@ pub fn draw(app: &App, picker: f32, now: f64, ctx: &Ctx) {
                 draw_pill(r.offset(up), label, level, ctx);
             }
         }
-    }
-    for (i, (line, at)) in ABOUT_LINES.iter().zip(&screen.about).enumerate() {
-        let color = if i == 0 { p.text } else { p.muted };
-        draw_label(line, *at + up, ABOUT_SIZE, color, Align::Center, font);
     }
     set_default_camera();
 }

@@ -16,6 +16,7 @@ use crate::reveal::Reveal;
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
 use crate::settings_screen::{Control, SettingsHit, SettingsScreen};
+use crate::stats_screen::StatsScreen;
 use crate::theme::{ThemeId, palette};
 
 fn app(w: f32, h: f32, settings: Settings) -> App {
@@ -347,17 +348,34 @@ fn a_failed_save_is_reported_not_fatal() {
     assert_eq!(a.table().game().board().waste.len(), 1, "the game goes on");
 }
 
-use crate::menu::Tab;
-
 #[test]
-fn statistics_open_in_the_panel_and_done_returns_to_the_menu() {
-    let mut a = app(390.0, 844.0, Settings::default());
+fn statistics_have_their_own_screen_with_a_filter() {
+    // Short enough to scroll even without games.
+    let mut a = app(640.0, 360.0, Settings::default());
     let m = open_menu_screen(&mut a, 1.0);
     tap(&mut a, item(&m, Item::Stats), 2.0);
-    assert_eq!(a.menu().expect("open").tab, Tab::Stats);
-    let done = a.menu().expect("open").menu.done.center();
-    tap(&mut a, done, 3.0);
-    assert!(a.menu().is_none());
+    assert_eq!(a.view(), Screen::Stats);
+    assert_eq!(a.stats_view().filter, 0);
+    let s = StatsScreen::new(a.table().layout(), a.stats().history().len());
+    tap(&mut a, s.filter.next.center(), 3.0);
+    assert_eq!(a.stats_view().filter, 1);
+    tap(&mut a, s.filter.next.center(), 4.0);
+    tap(&mut a, s.filter.next.center(), 5.0);
+    assert_eq!(a.stats_view().filter, 2, "stops at the end");
+
+    let from = s.viewport.center();
+    a.handle(
+        Gesture::DragStart {
+            origin: from,
+            at: from,
+        },
+        6.0,
+    );
+    a.handle(Gesture::Drop(from - vec2(0.0, 100.0)), 6.1);
+    assert!((a.stats_view().scroll - 100.0).abs() < 0.01);
+
+    let back = button(&a, Button::Settings);
+    tap(&mut a, back, 7.0);
     assert_eq!(a.view(), Screen::Menu);
 }
 
@@ -635,13 +653,27 @@ fn selectors_change_draw_and_hand_and_are_saved() {
 }
 
 #[test]
-fn about_opens_the_settings_screen_at_its_end() {
+fn about_has_its_own_screen() {
     let mut a = app(390.0, 844.0, Settings::default());
     let m = open_menu_screen(&mut a, 1.0);
     tap(&mut a, item(&m, Item::About), 2.0);
-    assert_eq!(a.view(), Screen::Settings);
-    let max = SettingsScreen::new(a.table().layout()).max_scroll();
-    assert_eq!(a.settings_view().scroll, max, "scrolled to About");
+    assert_eq!(a.view(), Screen::About);
+    let back = button(&a, Button::Settings);
+    tap(&mut a, back, 3.0);
+    assert_eq!(a.view(), Screen::Menu);
+}
+
+#[test]
+fn each_screen_opens_at_the_top() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    open_settings(&mut a, 1.0);
+    let _ = row_control(&mut a, Row::ResetStats, 1.5);
+    assert!(a.settings_view().scroll > 0.0);
+    let back = button(&a, Button::Settings);
+    tap(&mut a, back, 2.0);
+    let m = MainMenu::new(a.table().layout());
+    tap(&mut a, item(&m, Item::Stats), 3.0);
+    assert_eq!(a.stats_view().scroll, 0.0);
 }
 
 #[test]
@@ -710,8 +742,8 @@ fn screens_fade_through_the_background() {
 #[test]
 fn resizing_keeps_the_settings_scroll_in_range() {
     let mut a = app(390.0, 844.0, Settings::default());
-    let m = open_menu_screen(&mut a, 1.0);
-    tap(&mut a, item(&m, Item::About), 2.0);
+    open_settings(&mut a, 1.0);
+    let _ = row_control(&mut a, Row::ResetStats, 1.5);
     assert!(a.settings_view().scroll > 0.0);
     a.update(vec2(1280.0, 2000.0), 3.0);
     let max = SettingsScreen::new(a.table().layout()).max_scroll();

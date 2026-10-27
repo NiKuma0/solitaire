@@ -1,11 +1,12 @@
 //! Drawing. Everything here reads state; nothing changes it.
 
+mod about;
 mod card;
 pub mod icon;
 mod main_menu;
-mod menu;
 mod settings_screen;
 mod shapes;
+mod stats_screen;
 pub mod suit;
 mod text;
 pub mod widgets;
@@ -67,12 +68,10 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
         Screen::Game => draw_game(app, picker, now, &ctx),
         Screen::Menu => main_menu::draw(app, picker, now, &ctx),
         Screen::Settings => settings_screen::draw(app, picker, now, &ctx),
+        Screen::Stats => stats_screen::draw(app, picker, now, &ctx),
+        Screen::About => about::draw(app, picker, now, &ctx),
     }
     draw_theme_button(app, picker, now, &full);
-    if let Some(view) = app.menu() {
-        let lit = |hit| app.feedback(Target::Menu(hit), now);
-        menu::draw(view, *app.settings(), app.stats(), &lit, &full);
-    }
 }
 
 /// Cards, bars, and anything over the table.
