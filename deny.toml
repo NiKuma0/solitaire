@@ -1,0 +1,62 @@
+# cargo-deny configuration: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# Only the platforms we ship; keeps unrelated target-specific crates out of checks.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "wasm32-unknown-unknown",
+    "aarch64-linux-android",
+    "armv7-linux-androideabi",
+]
+all-features = true
+
+[advisories]
+# Both come with macroquad (fixed by SPEC §4) and have no fixed release. Revisit on every macroquad update.
+ignore = [
+    { id = "RUSTSEC-2025-0035", reason = "macroquad unsoundness via mutable statics; no fix upstream, we use it single-threaded as intended" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser unmaintained, pulled in by macroquad -> fontdue; no alternative without forking" },
+]
+
+[licenses]
+# OFL-1.1 covers the embedded font (assets/fonts), not crates.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "OFL-1.1",
+]
+confidence-threshold = 0.9
+# The allow-list is policy (SPEC §10), not a snapshot of today's tree.
+unused-allowed-license = "allow"
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+# The app must never touch the network; fail fast if a networking crate sneaks in.
+deny = [
+    { crate = "reqwest", reason = "no network access" },
+    { crate = "ureq", reason = "no network access" },
+    { crate = "hyper", reason = "no network access" },
+    { crate = "quad-net", reason = "no network access" },
+    { crate = "tokio", reason = "no network access / async runtime not needed" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
