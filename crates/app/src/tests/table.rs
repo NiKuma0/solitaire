@@ -366,3 +366,116 @@ fn settings_button_asks_to_open_settings() {
     assert_eq!(t.drain_events(), [Event::OpenSettings]);
     assert_eq!(t.drain_events(), [], "drained");
 }
+
+use crate::settings::Settings;
+
+/// A fresh deal with a tableau card that has a tap move, and that card's centre.
+fn deal_with_tap_move() -> (Game, Vec2, Card) {
+    for seed in 0..40 {
+        let game = Game::new(seed, DrawMode::One);
+        for (i, col) in game.board().tableau.iter().enumerate() {
+            let Some(card) = col.top() else { continue };
+            if game.best_move_for(card).is_some() {
+                let l = crate::layout::Layout::new(vec2(390.0, 844.0), Insets::default());
+                let r = l.card_rect(
+                    game.board(),
+                    DrawMode::One,
+                    PileId::Tableau(i as u8),
+                    col.len() - 1,
+                );
+                return (game, r.center(), card);
+            }
+        }
+    }
+    panic!("no deal with a tap move");
+}
+
+#[test]
+fn without_tap_to_move_a_single_tap_does_nothing_and_a_double_tap_moves() {
+    let (game, p, _) = deal_with_tap_move();
+    let before = game.board().clone();
+    let mut t = table(game, 390.0, 844.0);
+    t.configure(&Settings {
+        tap_to_move: false,
+        ..Settings::default()
+    });
+
+    t.set_clock(10.0);
+    tap(&mut t, p);
+    assert_eq!(t.game().board(), &before, "single tap");
+    t.set_clock(11.0);
+    tap(&mut t, p);
+    assert_eq!(t.game().board(), &before, "taps too far apart");
+    t.set_clock(11.3);
+    tap(&mut t, p);
+    assert_ne!(t.game().board(), &before, "double tap moves");
+}
+
+#[test]
+fn a_tap_with_nowhere_to_go_is_rejected() {
+    for seed in 0..40 {
+        let game = Game::new(seed, DrawMode::One);
+        let Some((i, card)) = game
+            .board()
+            .tableau
+            .iter()
+            .enumerate()
+            .find_map(|(i, col)| {
+                col.top()
+                    .filter(|&c| game.best_move_for(c).is_none())
+                    .map(|c| (i, c))
+            })
+        else {
+            continue;
+        };
+        let mut t = table(game, 390.0, 844.0);
+        let b = t.game().board().clone();
+        let r = t.layout().card_rect(
+            &b,
+            DrawMode::One,
+            PileId::Tableau(i as u8),
+            b.tableau[i].len() - 1,
+        );
+        tap(&mut t, r.center());
+        assert_eq!(t.drain_events(), [Event::Rejected(card)]);
+        return;
+    }
+    panic!("no stuck card in 40 deals");
+}
+
+#[test]
+fn new_game_and_auto_complete_are_announced() {
+    let mut t = table(Game::new(1, DrawMode::One), 390.0, 844.0);
+    t.press(Button::New);
+    assert_eq!(t.drain_events(), [Event::NewGame]);
+    let mut t = table(game_from(&one_card_left(), DrawMode::One), 390.0, 844.0);
+    t.press(Button::AutoComplete);
+    assert_eq!(t.drain_events(), [Event::AutoComplete]);
+}
+
+#[test]
+fn draw_mode_changes_apply_to_the_next_game() {
+    let mut t = table(Game::new(1, DrawMode::One), 390.0, 844.0);
+    t.configure(&Settings {
+        draw: DrawMode::Three,
+        ..Settings::default()
+    });
+    assert_eq!(
+        t.game().draw_mode(),
+        DrawMode::One,
+        "current game unchanged"
+    );
+    t.press(Button::New);
+    assert_eq!(t.game().draw_mode(), DrawMode::Three);
+}
+
+#[test]
+fn layout_settings_take_effect_immediately() {
+    let mut t = table(Game::new(1, DrawMode::One), 390.0, 844.0);
+    let right = t.layout().stock.x;
+    t.configure(&Settings {
+        left_handed: true,
+        ..Settings::default()
+    });
+    assert!(t.layout().stock.x < right);
+}

@@ -4,11 +4,12 @@
 //! player is doing with it (a drag in progress) and cached flags for the UI.
 
 use macroquad::math::{Rect, Vec2};
-use solitaire_core::{Card, Game, Move, PileId};
+use solitaire_core::{Card, DrawMode, Game, Move, PileId};
 
 use crate::gesture::Gesture;
 use crate::hit::{Spot, drop_targets, spot_at};
-use crate::layout::{Button, Insets, Layout};
+use crate::layout::{Button, Insets, Layout, LayoutOptions};
+use crate::settings::Settings;
 
 /// A stack being dragged: card `index` of `pile` and everything above it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -33,7 +34,14 @@ impl Drag {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     OpenSettings,
+    /// A tapped card had nowhere to go.
+    Rejected(Card),
+    NewGame,
+    AutoComplete,
 }
+
+/// Two taps on the same card within this many seconds make a double tap.
+const DOUBLE_TAP: f64 = 0.4;
 
 pub struct Table {
     game: Game,
@@ -43,6 +51,14 @@ pub struct Table {
     next_seed: u64,
     can_auto_complete: bool,
     stuck: bool,
+    insets: Insets,
+    options: LayoutOptions,
+    tap_to_move: bool,
+    /// Draw mode for the next new game.
+    next_draw: DrawMode,
+    /// Seconds, set by the caller each frame; only used to spot double taps.
+    clock: f64,
+    last_tap: Option<(Card, f64)>,
 }
 
 impl Table {
@@ -57,7 +73,14 @@ impl Table {
             next_seed,
             can_auto_complete: false,
             stuck: false,
+            insets,
+            options: LayoutOptions::default(),
+            tap_to_move: true,
+            next_draw: DrawMode::One,
+            clock: 0.0,
+            last_tap: None,
         };
+        table.next_draw = table.game.draw_mode();
         table.refresh();
         table
     }
@@ -88,9 +111,25 @@ impl Table {
     }
 
     pub fn resize(&mut self, screen: Vec2, insets: Insets) {
-        if self.layout.screen != screen {
-            self.layout = Layout::new(screen, insets);
+        if self.layout.screen != screen || self.insets != insets {
+            self.insets = insets;
+            self.layout = Layout::with_options(screen, insets, self.options);
         }
+    }
+
+    /// Applies the player's settings. Draw mode waits for the next game.
+    pub fn configure(&mut self, settings: &Settings) {
+        self.tap_to_move = settings.tap_to_move;
+        self.next_draw = settings.draw;
+        let options = settings.layout_options();
+        if options != self.options {
+            self.options = options;
+            self.layout = Layout::with_options(self.layout.screen, self.insets, options);
+        }
+    }
+
+    pub fn set_clock(&mut self, now: f64) {
+        self.clock = now;
     }
 
     #[must_use]
@@ -117,6 +156,7 @@ impl Table {
                 let _ = self.game.redo();
             }
             Button::AutoComplete => {
+                self.events.push(Event::AutoComplete);
                 for mv in self.game.auto_complete_plan().unwrap_or_default() {
                     if self.game.apply(mv).is_err() {
                         break;
@@ -155,9 +195,19 @@ impl Table {
         let mv = match spot_at(&self.layout, board, self.game.draw_mode(), p) {
             Some(Spot::Stock) if board.stock.is_empty() => Some(Move::Recycle),
             Some(Spot::Stock) => Some(Move::Draw),
-            Some(Spot::Card { pile, index }) => self
-                .face_up_card(pile, index)
-                .and_then(|card| self.game.best_move_for(card)),
+            Some(Spot::Card { pile, index }) => {
+                let Some(card) = self.face_up_card(pile, index) else {
+                    return;
+                };
+                if !self.tap_to_move && !self.is_double_tap(card) {
+                    return;
+                }
+                let mv = self.game.best_move_for(card);
+                if mv.is_none() {
+                    self.events.push(Event::Rejected(card));
+                }
+                mv
+            }
             Some(Spot::Empty(_)) | None => None,
         };
         if let Some(mv) = mv
@@ -213,11 +263,25 @@ impl Table {
         }
     }
 
+    /// Remembers this tap; true if it completes a double tap on `card`.
+    fn is_double_tap(&mut self, card: Card) -> bool {
+        let double = self
+            .last_tap
+            .is_some_and(|(c, t)| c == card && self.clock - t <= DOUBLE_TAP);
+        self.last_tap = if double {
+            None
+        } else {
+            Some((card, self.clock))
+        };
+        double
+    }
+
     fn new_game(&mut self) {
         let seed = self.next_seed;
         self.next_seed = splitmix64(seed);
-        self.game = Game::new(seed, self.game.draw_mode());
+        self.game = Game::new(seed, self.next_draw);
         self.drag = None;
+        self.events.push(Event::NewGame);
         self.refresh();
     }
 
