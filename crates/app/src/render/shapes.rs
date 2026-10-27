@@ -65,6 +65,29 @@ pub fn fill_shapes(shapes: &[Shape], color: Color) {
         match *shape {
             Shape::Circle { center, radius } => draw_circle(center.x, center.y, radius, color),
             Shape::Triangle([a, b, c]) => draw_triangle(a, b, c, color),
+            Shape::Line { a, b, width } => {
+                draw_line(a.x, a.y, b.x, b.y, width, color);
+                draw_circle(a.x, a.y, width / 2.0, color);
+                draw_circle(b.x, b.y, width / 2.0, color);
+            }
+            Shape::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+                width,
+            } => {
+                draw_arc(
+                    center.x,
+                    center.y,
+                    ARC_SIDES,
+                    radius - width / 2.0,
+                    start,
+                    width,
+                    sweep,
+                    color,
+                );
+            }
         }
     }
 }

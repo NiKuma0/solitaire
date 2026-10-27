@@ -22,3 +22,7 @@ mod test_support;
 #[cfg(test)]
 #[path = "tests/suit.rs"]
 mod suit_tests;
+
+#[cfg(test)]
+#[path = "tests/icon.rs"]
+mod icon_tests;

@@ -8,8 +8,25 @@ use solitaire_core::{Rank, Suit};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Shape {
-    Circle { center: Vec2, radius: f32 },
+    Circle {
+        center: Vec2,
+        radius: f32,
+    },
     Triangle([Vec2; 3]),
+    /// A stroke with round ends.
+    Line {
+        a: Vec2,
+        b: Vec2,
+        width: f32,
+    },
+    /// A stroke along a circle, centred on `radius`; angles in degrees, clockwise on screen.
+    Arc {
+        center: Vec2,
+        radius: f32,
+        start: f32,
+        sweep: f32,
+        width: f32,
+    },
 }
 
 /// Shapes for `suit`, filling a `size` x `size` box around `center`.

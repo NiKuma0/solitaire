@@ -13,6 +13,7 @@ fn bounds(shapes: &[Shape]) -> (Vec2, Vec2) {
         let (lo, hi) = match *s {
             Shape::Circle { center, radius } => (center - radius, center + radius),
             Shape::Triangle(p) => (p[0].min(p[1]).min(p[2]), p[0].max(p[1]).max(p[2])),
+            Shape::Line { .. } | Shape::Arc { .. } => unreachable!("suits are filled shapes"),
         };
         min = min.min(lo);
         max = max.max(hi);

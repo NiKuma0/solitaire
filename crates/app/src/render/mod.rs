@@ -1,6 +1,7 @@
 //! Drawing the table. Everything here reads state; nothing changes it.
 
 mod card;
+pub mod icon;
 mod shapes;
 pub mod suit;
 mod text;
