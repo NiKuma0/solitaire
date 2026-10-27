@@ -24,11 +24,5 @@ pub use save::LoadError;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]
-mod tests {
-    use super::VERSION;
-
-    #[test]
-    fn version_is_set() {
-        assert_ne!(VERSION, "");
-    }
-}
+#[path = "tests/lib.rs"]
+mod tests;
