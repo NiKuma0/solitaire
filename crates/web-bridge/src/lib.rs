@@ -26,7 +26,9 @@ pub fn prefers_reduced_motion() -> bool {
 #[cfg(target_arch = "wasm32")]
 #[allow(unsafe_code)]
 mod imp {
-    // Implemented in web/storage.js, registered as the "solitaire_web" miniquad plugin.
+    // Implemented in web/storage.js, registered as the "solitaire_web" miniquad
+    // plugin; miniquad puts plugin functions in the "env" import module.
+    #[link(wasm_import_module = "env")]
     unsafe extern "C" {
         fn solitaire_storage_get(key: *const u8, key_len: usize) -> i32;
         fn solitaire_storage_take(buf: *mut u8, len: usize);
