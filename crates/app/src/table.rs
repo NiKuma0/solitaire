@@ -38,10 +38,26 @@ pub enum Event {
     Rejected(Card),
     NewGame,
     AutoComplete,
+    /// The game changed and should be saved.
+    Changed,
+    /// A game ended, won or abandoned, for the statistics.
+    GameOver {
+        draw: DrawMode,
+        score: u32,
+        won: bool,
+        moves: u32,
+    },
 }
 
 /// Two taps on the same card within this many seconds make a double tap.
 const DOUBLE_TAP: f64 = 0.4;
+
+/// Expensive facts about the game, recomputed after each change.
+#[derive(Debug, Clone, Copy, Default)]
+struct Hints {
+    can_auto_complete: bool,
+    stuck: bool,
+}
 
 pub struct Table {
     game: Game,
@@ -49,8 +65,7 @@ pub struct Table {
     layout: Layout,
     drag: Option<Drag>,
     next_seed: u64,
-    can_auto_complete: bool,
-    stuck: bool,
+    hints: Hints,
     insets: Insets,
     options: LayoutOptions,
     tap_to_move: bool,
@@ -59,6 +74,8 @@ pub struct Table {
     /// Seconds, set by the caller each frame; only used to spot double taps.
     clock: f64,
     last_tap: Option<(Card, f64)>,
+    /// This game's win is already in the statistics.
+    recorded_win: bool,
 }
 
 impl Table {
@@ -71,15 +88,16 @@ impl Table {
             layout: Layout::new(screen, insets),
             drag: None,
             next_seed,
-            can_auto_complete: false,
-            stuck: false,
+            hints: Hints::default(),
             insets,
             options: LayoutOptions::default(),
             tap_to_move: true,
             next_draw: DrawMode::One,
             clock: 0.0,
             last_tap: None,
+            recorded_win: false,
         };
+        table.recorded_win = table.game.is_won();
         table.next_draw = table.game.draw_mode();
         table.refresh();
         table
@@ -102,7 +120,7 @@ impl Table {
 
     #[must_use]
     pub const fn is_stuck(&self) -> bool {
-        self.stuck
+        self.hints.stuck
     }
 
     /// Events since the last call.
@@ -136,9 +154,10 @@ impl Table {
     pub fn is_enabled(&self, button: Button) -> bool {
         match button {
             Button::New | Button::Settings => true,
-            Button::Undo => self.game.can_undo(),
-            Button::Redo => self.game.can_redo(),
-            Button::AutoComplete => self.can_auto_complete,
+            // A win is final: no taking it back.
+            Button::Undo => self.game.can_undo() && !self.game.is_won(),
+            Button::Redo => self.game.can_redo() && !self.game.is_won(),
+            Button::AutoComplete => self.hints.can_auto_complete,
         }
     }
 
@@ -147,8 +166,14 @@ impl Table {
             return;
         }
         match button {
-            Button::Settings => self.events.push(Event::OpenSettings),
-            Button::New => self.new_game(),
+            Button::Settings => {
+                self.events.push(Event::OpenSettings);
+                return;
+            }
+            Button::New => {
+                self.new_game();
+                return;
+            }
             Button::Undo => {
                 let _ = self.game.undo();
             }
@@ -164,7 +189,14 @@ impl Table {
                 }
             }
         }
-        self.refresh();
+        self.changed();
+    }
+
+    /// Deals the current game's cards again from the start.
+    pub fn restart(&mut self) {
+        self.abandon();
+        self.game = Game::new(self.game.seed(), self.game.draw_mode());
+        self.start_game();
     }
 
     pub fn handle(&mut self, gesture: Gesture) {
@@ -213,7 +245,7 @@ impl Table {
         if let Some(mv) = mv
             && self.game.apply(mv).is_ok()
         {
-            self.refresh();
+            self.changed();
         }
     }
 
@@ -257,7 +289,7 @@ impl Table {
                 count,
             };
             if to != drag.pile && self.game.apply(mv).is_ok() {
-                self.refresh();
+                self.changed();
                 return;
             }
         }
@@ -277,18 +309,53 @@ impl Table {
     }
 
     fn new_game(&mut self) {
+        self.abandon();
         let seed = self.next_seed;
         self.next_seed = splitmix64(seed);
         self.game = Game::new(seed, self.next_draw);
+        self.start_game();
+    }
+
+    fn start_game(&mut self) {
         self.drag = None;
+        self.recorded_win = false;
         self.events.push(Event::NewGame);
+        self.changed();
+    }
+
+    /// Records the current game as lost if the player made any move in it.
+    fn abandon(&mut self) {
+        let board = self.game.board();
+        if !self.recorded_win && board.moves > 0 {
+            self.events.push(Event::GameOver {
+                draw: self.game.draw_mode(),
+                score: board.score,
+                won: false,
+                moves: board.moves,
+            });
+        }
+    }
+
+    /// After any change to the game: refresh flags, ask for a save, record a win.
+    fn changed(&mut self) {
         self.refresh();
+        self.events.push(Event::Changed);
+        if self.game.is_won() && !self.recorded_win {
+            self.recorded_win = true;
+            let board = self.game.board();
+            self.events.push(Event::GameOver {
+                draw: self.game.draw_mode(),
+                score: board.score,
+                won: true,
+                moves: board.moves,
+            });
+        }
     }
 
     /// Recomputes the cached flags after the game changed.
     fn refresh(&mut self) {
-        self.can_auto_complete = self.game.can_auto_complete();
-        self.stuck = !self.can_auto_complete && self.game.is_stuck();
+        self.hints.can_auto_complete = self.game.can_auto_complete();
+        self.hints.stuck = !self.hints.can_auto_complete && self.game.is_stuck();
     }
 
     fn pile_len(&self, pile: PileId) -> usize {

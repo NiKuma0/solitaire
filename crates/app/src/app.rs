@@ -156,6 +156,7 @@ impl App {
                     self.anim.stop_win();
                 }
                 Event::AutoComplete => self.cue = Cue::Cascade,
+                Event::Changed | Event::GameOver { .. } => {}
             }
         }
 

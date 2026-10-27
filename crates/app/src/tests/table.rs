@@ -447,10 +447,10 @@ fn a_tap_with_nowhere_to_go_is_rejected() {
 fn new_game_and_auto_complete_are_announced() {
     let mut t = table(Game::new(1, DrawMode::One), 390.0, 844.0);
     t.press(Button::New);
-    assert_eq!(t.drain_events(), [Event::NewGame]);
+    assert!(t.drain_events().contains(&Event::NewGame));
     let mut t = table(game_from(&one_card_left(), DrawMode::One), 390.0, 844.0);
     t.press(Button::AutoComplete);
-    assert_eq!(t.drain_events(), [Event::AutoComplete]);
+    assert!(t.drain_events().contains(&Event::AutoComplete));
 }
 
 #[test]
@@ -478,4 +478,85 @@ fn layout_settings_take_effect_immediately() {
         ..Settings::default()
     });
     assert!(t.layout().stock.x < right);
+}
+
+fn game_overs(t: &mut Table) -> Vec<Event> {
+    t.drain_events()
+        .into_iter()
+        .filter(|e| matches!(e, Event::GameOver { .. }))
+        .collect()
+}
+
+#[test]
+fn restart_deals_the_same_cards_again() {
+    let mut t = table(Game::new(21, DrawMode::Three), 390.0, 844.0);
+    let fresh = t.game().board().clone();
+    let stock = t.layout().stock.center();
+    tap(&mut t, stock);
+    t.drain_events();
+    t.restart();
+    assert_eq!(t.game().board(), &fresh);
+    assert_eq!(t.game().seed(), 21);
+    assert_eq!(
+        t.game().draw_mode(),
+        DrawMode::Three,
+        "keeps the deal's draw mode"
+    );
+    let events = t.drain_events();
+    assert!(events.contains(&Event::NewGame));
+    assert!(events.contains(&Event::GameOver {
+        draw: DrawMode::Three,
+        score: 0,
+        won: false,
+        moves: 1
+    }));
+}
+
+#[test]
+fn leaving_an_untouched_game_is_not_recorded() {
+    let mut t = table(Game::new(21, DrawMode::One), 390.0, 844.0);
+    t.press(Button::New);
+    assert_eq!(game_overs(&mut t), []);
+    t.restart();
+    assert_eq!(game_overs(&mut t), []);
+}
+
+#[test]
+fn a_win_is_recorded_once_and_freezes_undo() {
+    let mut t = table(game_from(&one_card_left(), DrawMode::One), 390.0, 844.0);
+    t.press(Button::AutoComplete);
+    let overs = game_overs(&mut t);
+    assert_eq!(overs.len(), 1);
+    assert!(matches!(overs[0], Event::GameOver { won: true, .. }));
+    assert!(!t.is_enabled(Button::Undo));
+    t.press(Button::Undo);
+    assert!(t.game().is_won());
+    t.press(Button::New);
+    assert_eq!(game_overs(&mut t), [], "a won game is not abandoned");
+}
+
+#[test]
+fn a_loaded_won_game_is_not_recorded_again() {
+    let mut won = game_from(&one_card_left(), DrawMode::One);
+    for mv in won.auto_complete_plan().expect("plan") {
+        won.apply(mv).expect("legal");
+    }
+    let mut t = table(won, 390.0, 844.0);
+    t.press(Button::New);
+    assert_eq!(game_overs(&mut t), []);
+}
+
+#[test]
+fn every_change_to_the_game_is_announced() {
+    let mut t = table(Game::new(3, DrawMode::One), 390.0, 844.0);
+    t.drain_events();
+    let stock = t.layout().stock.center();
+    tap(&mut t, stock);
+    assert!(t.drain_events().contains(&Event::Changed));
+    t.press(Button::Undo);
+    assert!(t.drain_events().contains(&Event::Changed));
+    // A tap that changes nothing says nothing.
+    let empty = vec2(5.0, 400.0);
+    tap(&mut t, empty);
+    assert!(!t.drain_events().contains(&Event::Changed));
 }
