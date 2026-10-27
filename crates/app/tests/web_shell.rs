@@ -74,7 +74,7 @@ fn web_shell_references_no_external_urls() {
 fn page_background_matches_table_colour() {
     // Avoids a colour flash between page load and the first frame.
     let html = web_file("index.html");
-    let table = solitaire_app::TABLE_HEX;
+    let table = solitaire_app::PAGE_HEX;
     assert!(
         html.contains(&format!("background: {table};")),
         "body background"
@@ -83,4 +83,17 @@ fn page_background_matches_table_colour() {
         html.contains(&format!("name=\"theme-color\" content=\"{table}\"")),
         "theme-color"
     );
+}
+
+#[test]
+fn the_canvas_is_opaque() {
+    // A transparent canvas shows miniquad's non-premultiplied colours too bright
+    // wherever something translucent was drawn.
+    let boot = web_file("boot.js");
+    assert!(
+        boot.contains("alpha: false"),
+        "boot.js asks for an opaque context"
+    );
+    let before_load = boot.find("alpha: false") < boot.find("load(");
+    assert!(before_load, "before gl.js creates the context");
 }

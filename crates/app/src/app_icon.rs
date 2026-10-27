@@ -1,4 +1,4 @@
-//! The app icon, drawn in code: a card with a heart on the table colour.
+//! The app icon, drawn in code: a card with a heart, in the default theme.
 //!
 //! The same picture is the desktop window icon and, exported by
 //! `examples/export_icons.rs`, the Android launcher icon.
@@ -8,16 +8,13 @@ use macroquad::miniquad::conf::Icon;
 use solitaire_core::Suit;
 
 use crate::render::suit::{Shape, suit_shapes};
-use crate::theme::TABLE_RGB;
+use crate::theme::{Palette, ThemeId, palette};
 
 /// Centre of the heart, as fractions of the icon size.
 pub const HEART: (f32, f32) = (0.41, 0.56);
 
 /// Sub-pixel samples per side, for smooth edges.
 const SAMPLES: u32 = 4;
-const CARD_BACK: [u8; 3] = [0x3b, 0x4a, 0x6b];
-const CARD_FACE: [u8; 3] = [0xfb, 0xfa, 0xf6];
-const INK_RED: [u8; 3] = [0xc2, 0x3b, 0x3b];
 
 /// An axis-aligned rounded rectangle in unit coordinates.
 struct RoundRect {
@@ -48,7 +45,7 @@ fn shape_contains(shape: &Shape, p: Vec2) -> bool {
 }
 
 /// Colour at a point in unit coordinates, or `None` outside the icon.
-fn colour_at(p: Vec2, heart: &[Shape]) -> Option<[u8; 3]> {
+fn colour_at(p: Vec2, heart: &[Shape], colours: &Palette) -> Option<[u8; 3]> {
     let table = RoundRect {
         min: vec2(0.0, 0.0),
         max: vec2(1.0, 1.0),
@@ -65,22 +62,29 @@ fn colour_at(p: Vec2, heart: &[Shape]) -> Option<[u8; 3]> {
         radius: 0.05,
     };
     if heart.iter().any(|s| shape_contains(s, p)) {
-        Some(INK_RED)
+        Some(bytes(colours.red))
     } else if face.contains(p) {
-        Some(CARD_FACE)
+        Some(bytes(colours.face))
     } else if back.contains(p) {
-        Some(CARD_BACK)
+        Some(bytes(colours.accent))
     } else if table.contains(p) {
-        Some(TABLE_RGB)
+        Some(bytes(colours.bg))
     } else {
         None
     }
+}
+
+/// sRGB bytes of an opaque colour.
+fn bytes(c: macroquad::color::Color) -> [u8; 3] {
+    let [r, g, b, _] = c.into();
+    [r, g, b]
 }
 
 /// The icon as `size` x `size` RGBA pixels, row by row.
 #[must_use]
 pub fn rgba(size: u32) -> Vec<u8> {
     let heart = suit_shapes(Suit::Hearts, vec2(HEART.0, HEART.1), 0.26);
+    let colours = palette(ThemeId::Dark);
     let mut out = Vec::with_capacity((size * size * 4) as usize);
     let step = 1.0 / (size * SAMPLES) as f32;
     for y in 0..size {
@@ -92,7 +96,7 @@ pub fn rgba(size: u32) -> Vec<u8> {
                         ((x * SAMPLES + sx) as f32 + 0.5) * step,
                         ((y * SAMPLES + sy) as f32 + 0.5) * step,
                     );
-                    if let Some(c) = colour_at(p, &heart) {
+                    if let Some(c) = colour_at(p, &heart, &colours) {
                         for (sum, v) in rgb.iter_mut().zip(c) {
                             *sum += u32::from(v);
                         }

@@ -1,4 +1,6 @@
-//! Colours. Full themes arrive in M3; for now there is one palette.
+//! Colours: each theme is a background and an accent, the rest is derived (SPEC §7.7).
+//!
+//! This is the only module with raw colour values.
 
 use macroquad::color::Color;
 use serde::{Deserialize, Serialize};
@@ -6,78 +8,104 @@ use solitaire_core::Suit;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ThemeId {
-    Light,
     Dark,
+    Light,
     Black,
     Warm,
+    Ocean,
+    Plum,
+    Moss,
     HighContrast,
 }
 
 impl ThemeId {
-    pub const ALL: [Self; 5] = [
-        Self::Light,
+    /// In the order the theme picker shows them.
+    pub const ALL: [Self; 8] = [
         Self::Dark,
+        Self::Light,
         Self::Black,
         Self::Warm,
+        Self::Ocean,
+        Self::Plum,
+        Self::Moss,
         Self::HighContrast,
     ];
 
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Light => "Light",
             Self::Dark => "Dark",
+            Self::Light => "Light",
             Self::Black => "Black",
             Self::Warm => "Warm",
+            Self::Ocean => "Ocean",
+            Self::Plum => "Plum",
+            Self::Moss => "Moss",
             Self::HighContrast => "High contrast",
+        }
+    }
+
+    /// Background and accent; every other colour is derived from these.
+    const fn seed(self) -> (u32, u32) {
+        match self {
+            Self::Dark => (PAGE, 0xe8_b4_4f),
+            Self::Light => (0xe4_e7_e1, 0x2f_7a_68),
+            Self::Black => (0x00_00_00, 0x7a_a7_e8),
+            Self::Warm => (0xea_dc_c4, 0xb0_50_2c),
+            Self::Ocean => (0x0f_1f_2e, 0x4f_c3_c8),
+            Self::Plum => (0x24_19_2b, 0xf0_9c_84),
+            Self::Moss => (0xdf_e6_d6, 0x5d_8a_2e),
+            Self::HighContrast => (0x00_00_00, 0xff_d4_00),
         }
     }
 }
 
-/// Table colour as sRGB bytes.
-pub const TABLE_RGB: [u8; 3] = [0x2f, 0x5d, 0x50];
+/// Background of the default theme, which the page also paints before the first frame.
+const PAGE: u32 = 0x1b_2a_25;
 
-/// Same colour for the HTML shell, which paints the page before the first frame.
-pub const TABLE_HEX: &str = "#2f5d50";
+pub const PAGE_RGB: [u8; 3] = [(PAGE >> 16) as u8, (PAGE >> 8) as u8, PAGE as u8];
 
-#[must_use]
-pub const fn table() -> Color {
-    let [r, g, b] = TABLE_RGB;
-    Color::from_rgba(r, g, b, 0xff)
-}
-
-const fn rgba(hex: u32, alpha: u8) -> Color {
-    Color::from_rgba((hex >> 16) as u8, (hex >> 8) as u8, hex as u8, alpha)
-}
+pub const PAGE_HEX: &str = "#1b2a25";
 
 const fn rgb(hex: u32) -> Color {
-    rgba(hex, 0xff)
+    Color::from_rgba((hex >> 16) as u8, (hex >> 8) as u8, hex as u8, 0xff)
 }
 
-/// Everything the renderer colours.
+const WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
+const BLACK: Color = Color::new(0.0, 0.0, 0.0, 1.0);
+
+/// Everything the renderer colours (SPEC §7.7).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Palette {
-    pub table: Color,
-    pub card_face: Color,
-    pub card_edge: Color,
-    pub card_back: Color,
-    pub card_back_trim: Color,
-    pub ink_red: Color,
-    pub ink_black: Color,
-    /// Diamonds and clubs in four-colour mode.
-    pub ink_blue: Color,
-    pub ink_green: Color,
-    pub slot: Color,
-    pub toolbar: Color,
-    pub button: Color,
-    pub ui_text: Color,
-    pub ui_text_dim: Color,
-    pub overlay: Color,
-    pub panel: Color,
-    pub panel_text: Color,
-    /// Selected options and primary buttons.
+    /// Behind every screen.
+    pub bg: Color,
+    /// Stock, face-down plates, toggles, sliders and press feedback.
     pub accent: Color,
-    pub accent_text: Color,
+    /// Card faces.
+    pub face: Color,
+    /// Outline of an empty pile.
+    pub slot: Color,
+    /// Main text and icons.
+    pub text: Color,
+    /// Spades and clubs.
+    pub ink: Color,
+    /// Hearts and diamonds: the accent, made readable on the face.
+    pub red: Color,
+    /// Diamonds and clubs in four-colour mode.
+    pub blue: Color,
+    pub green: Color,
+    /// Descriptions and secondary text.
+    pub muted: Color,
+    /// Outlines of buttons and panels.
+    pub line: Color,
+    /// Unfilled part of a slider.
+    pub track: Color,
+    /// Buttons that cannot be pressed.
+    pub disabled: Color,
+    /// Text and numbers on an accent fill.
+    pub on: Color,
+    /// Under cards with "Separated cards" on.
+    pub shadow: Color,
 }
 
 macro_rules! each_colour {
@@ -91,14 +119,30 @@ impl Palette {
     #[must_use]
     pub fn lerp(a: &Self, b: &Self, t: f32) -> Self {
         let t = t.clamp(0.0, 1.0);
-        let mix = |x: Color, y: Color| {
-            // Exact at both ends, unlike `x + (y - x) * t`.
-            let m = |u: f32, v: f32| u * (1.0 - t) + v * t;
-            Color::new(m(x.r, y.r), m(x.g, y.g), m(x.b, y.b), m(x.a, y.a))
+        let m = |x: Color, y: Color| mix(x, y, t);
+        each_colour!(a, b, m; bg, accent, face, slot, text, ink, red, blue, green, muted, line, track,
+            disabled, on, shadow)
+    }
+
+    /// Every colour mixed `k` of the way to the background, keeping its opacity:
+    /// a screen fading in or out over the flat background, without translucency.
+    #[must_use]
+    pub fn dimmed(&self, k: f32) -> Self {
+        let bg = self.bg;
+        let d = |c: Color, _: Color| {
+            let m = mix(c, bg, k);
+            Color::new(m.r, m.g, m.b, c.a)
         };
-        each_colour!(a, b, mix; table, card_face, card_edge, card_back, card_back_trim, ink_red, ink_black,
-            ink_blue, ink_green, slot, toolbar, button, ui_text, ui_text_dim, overlay, panel, panel_text,
-            accent, accent_text)
+        each_colour!(self, self, d; bg, accent, face, slot, text, ink, red, blue, green, muted, line,
+            track, disabled, on, shadow)
+    }
+
+    /// Every colour with its opacity scaled by `alpha`, for fading a whole panel.
+    #[must_use]
+    pub fn faded(&self, alpha: f32) -> Self {
+        let f = |c: Color, _: Color| faded(c, alpha);
+        each_colour!(self, self, f; bg, accent, face, slot, text, ink, red, blue, green, muted, line,
+            track, disabled, on, shadow)
     }
 }
 
@@ -106,144 +150,101 @@ impl Palette {
 #[must_use]
 pub fn ink(p: &Palette, suit: Suit, four_color: bool) -> Color {
     match (suit, four_color) {
-        (Suit::Hearts, _) | (Suit::Diamonds, false) => p.ink_red,
-        (Suit::Spades, _) | (Suit::Clubs, false) => p.ink_black,
-        (Suit::Diamonds, true) => p.ink_blue,
-        (Suit::Clubs, true) => p.ink_green,
+        (Suit::Hearts, _) | (Suit::Diamonds, false) => p.red,
+        (Suit::Spades, _) | (Suit::Clubs, false) => p.ink,
+        (Suit::Diamonds, true) => p.blue,
+        (Suit::Clubs, true) => p.green,
     }
 }
 
 #[must_use]
-pub const fn palette(theme: ThemeId) -> Palette {
-    match theme {
-        ThemeId::Light => LIGHT,
-        ThemeId::Dark => DARK,
-        ThemeId::Black => BLACK,
-        ThemeId::Warm => WARM,
-        ThemeId::HighContrast => HIGH_CONTRAST,
+pub fn palette(theme: ThemeId) -> Palette {
+    let (bg, accent) = theme.seed();
+    let text_ratio = if theme == ThemeId::HighContrast {
+        7.0
+    } else {
+        4.5
+    };
+    derive(rgb(bg), rgb(accent), text_ratio)
+}
+
+/// Background and accent of `theme`, for its swatch in the picker.
+#[must_use]
+pub const fn swatch(theme: ThemeId) -> (Color, Color) {
+    let (bg, accent) = theme.seed();
+    (rgb(bg), rgb(accent))
+}
+
+/// All tokens from a background and an accent; text reaches `text_ratio`.
+fn derive(bg: Color, accent: Color, text_ratio: f32) -> Palette {
+    let dark = luminance(bg) < 0.2;
+    let (face, light_ink, blue, green) = if dark {
+        (
+            mix(bg, WHITE, 0.13),
+            WHITE,
+            rgb(0x6f_a8_ff),
+            rgb(0x6c_c0_70),
+        )
+    } else {
+        (WHITE, BLACK, rgb(0x1f_5a_b5), rgb(0x1d_6e_37))
+    };
+    let on_both = |c: Color| readable(readable(c, face, text_ratio), bg, text_ratio);
+    let text = on_both(mix(light_ink, bg, 0.08));
+    let on = [bg, WHITE, BLACK]
+        .into_iter()
+        .find(|&c| contrast(c, accent) >= text_ratio)
+        .unwrap_or(if contrast(WHITE, accent) > contrast(BLACK, accent) {
+            WHITE
+        } else {
+            BLACK
+        });
+    Palette {
+        bg,
+        accent,
+        face,
+        slot: readable(mix(text, bg, 0.72), bg, 1.5),
+        text,
+        ink: text,
+        red: readable(accent, face, text_ratio),
+        blue: readable(blue, face, text_ratio),
+        green: readable(green, face, text_ratio),
+        muted: readable(mix(text, bg, 0.35), bg, text_ratio),
+        line: readable(mix(text, bg, 0.6), bg, 3.0),
+        track: readable(mix(text, bg, 0.5), bg, 3.0),
+        disabled: mix(text, bg, 0.65),
+        on,
+        shadow: faded(BLACK, if dark { 0.4 } else { 0.18 }),
     }
 }
 
-const LIGHT: Palette = Palette {
-    table: rgb(0xd9_e2_dc),
-    card_face: rgb(0xff_ff_ff),
-    card_edge: rgba(0x00_00_00, 0x38),
-    card_back: rgb(0x2c_6e_63),
-    card_back_trim: rgba(0xff_ff_ff, 0x66),
-    ink_red: rgb(0xb3_26_1e),
-    ink_black: rgb(0x1c_1f_23),
-    ink_blue: rgb(0x1f_5a_b5),
-    ink_green: rgb(0x1d_6e_37),
-    slot: rgba(0x1c_1f_23, 0x40),
-    toolbar: rgba(0x00_00_00, 0x0f),
-    button: rgba(0x00_00_00, 0x12),
-    ui_text: rgb(0x1c_1f_23),
-    ui_text_dim: rgba(0x1c_1f_23, 0x73),
-    overlay: rgba(0x00_00_00, 0x66),
-    panel: rgb(0xf7_f8_f6),
-    panel_text: rgb(0x1c_1f_23),
-    accent: rgb(0x2c_6e_63),
-    accent_text: rgb(0xff_ff_ff),
-};
-
-const DARK: Palette = Palette {
-    table: table(),
-    card_face: rgb(0xfb_fa_f6),
-    card_edge: rgba(0x00_00_00, 0x40),
-    card_back: rgb(0x3b_4a_6b),
-    card_back_trim: rgba(0xff_ff_ff, 0x55),
-    ink_red: rgb(0xc2_3b_3b),
-    ink_black: rgb(0x1f_23_28),
-    ink_blue: rgb(0x1f_5a_b5),
-    ink_green: rgb(0x1d_6e_37),
-    slot: rgba(0xff_ff_ff, 0x40),
-    toolbar: rgba(0x00_00_00, 0x26),
-    button: rgba(0xff_ff_ff, 0x1f),
-    ui_text: rgb(0xf4_f3_ee),
-    ui_text_dim: rgba(0xf4_f3_ee, 0x59),
-    overlay: rgba(0x00_00_00, 0x80),
-    panel: rgb(0x1e_2b_27),
-    panel_text: rgb(0xf4_f3_ee),
-    accent: rgb(0xe9_c4_6a),
-    accent_text: rgb(0x1f_23_28),
-};
-
-const BLACK: Palette = Palette {
-    table: rgb(0x00_00_00),
-    card_face: rgb(0xe6_e4_df),
-    card_edge: rgba(0xff_ff_ff, 0x1a),
-    card_back: rgb(0x1d_2a_44),
-    card_back_trim: rgba(0xff_ff_ff, 0x40),
-    ink_red: rgb(0xa8_2a_25),
-    ink_black: rgb(0x14_16_19),
-    ink_blue: rgb(0x1a_4f_a3),
-    ink_green: rgb(0x1a_60_31),
-    slot: rgba(0xff_ff_ff, 0x33),
-    toolbar: rgba(0xff_ff_ff, 0x0a),
-    button: rgba(0xff_ff_ff, 0x1a),
-    ui_text: rgb(0xd8_d6_d0),
-    ui_text_dim: rgba(0xd8_d6_d0, 0x59),
-    overlay: rgba(0x00_00_00, 0x99),
-    panel: rgb(0x12_12_12),
-    panel_text: rgb(0xd8_d6_d0),
-    accent: rgb(0x7f_a6_e0),
-    accent_text: rgb(0x00_00_00),
-};
-
-const WARM: Palette = Palette {
-    table: rgb(0xe8_dc_c4),
-    card_face: rgb(0xff_fa_f0),
-    card_edge: rgba(0x4a_32_1e, 0x40),
-    card_back: rgb(0x8a_4b_2f),
-    card_back_trim: rgba(0xff_f0_dc, 0x66),
-    ink_red: rgb(0xa8_32_2a),
-    ink_black: rgb(0x2a_21_1b),
-    ink_blue: rgb(0x24_50_8f),
-    ink_green: rgb(0x2e_6b_34),
-    slot: rgba(0x4a_32_1e, 0x40),
-    toolbar: rgba(0x4a_32_1e, 0x14),
-    button: rgba(0x4a_32_1e, 0x14),
-    ui_text: rgb(0x2a_21_1b),
-    ui_text_dim: rgba(0x2a_21_1b, 0x73),
-    overlay: rgba(0x2a_21_1b, 0x66),
-    panel: rgb(0xfb_f4_e6),
-    panel_text: rgb(0x2a_21_1b),
-    accent: rgb(0x8a_4b_2f),
-    accent_text: rgb(0xff_fa_f0),
-};
-
-const HIGH_CONTRAST: Palette = Palette {
-    table: rgb(0x00_00_00),
-    card_face: rgb(0xff_ff_ff),
-    card_edge: rgb(0xff_ff_ff),
-    card_back: rgb(0xff_d4_00),
-    card_back_trim: rgb(0x00_00_00),
-    ink_red: rgb(0xa0_00_00),
-    ink_black: rgb(0x00_00_00),
-    ink_blue: rgb(0x00_00_c0),
-    ink_green: rgb(0x00_5a_00),
-    slot: rgba(0xff_ff_ff, 0xb3),
-    toolbar: rgb(0x00_00_00),
-    button: rgba(0xff_ff_ff, 0x26),
-    ui_text: rgb(0xff_ff_ff),
-    ui_text_dim: rgba(0xff_ff_ff, 0x99),
-    overlay: rgba(0x00_00_00, 0xcc),
-    panel: rgb(0x00_00_00),
-    panel_text: rgb(0xff_ff_ff),
-    accent: rgb(0xff_d4_00),
-    accent_text: rgb(0x00_00_00),
-};
-
-/// `top` alpha-blended over an opaque `bottom`.
+/// `c` with its opacity scaled by `alpha`.
 #[must_use]
-pub fn over(top: Color, bottom: Color) -> Color {
-    let a = top.a;
-    Color::new(
-        top.r * a + bottom.r * (1.0 - a),
-        top.g * a + bottom.g * (1.0 - a),
-        top.b * a + bottom.b * (1.0 - a),
-        1.0,
-    )
+pub const fn faded(c: Color, alpha: f32) -> Color {
+    Color::new(c.r, c.g, c.b, c.a * alpha)
+}
+
+/// `a` (t = 0) to `b` (t = 1); exact at both ends.
+#[must_use]
+pub fn mix(a: Color, b: Color, t: f32) -> Color {
+    let m = |u: f32, v: f32| u * (1.0 - t) + v * t;
+    Color::new(m(a.r, b.r), m(a.g, b.g), m(a.b, b.b), m(a.a, b.a))
+}
+
+/// `c`, moved towards black or white just far enough to reach `ratio` against `bg`.
+#[must_use]
+pub fn readable(c: Color, bg: Color, ratio: f32) -> Color {
+    if contrast(c, bg) >= ratio {
+        return c;
+    }
+    let extreme = if contrast(WHITE, bg) > contrast(BLACK, bg) {
+        WHITE
+    } else {
+        BLACK
+    };
+    (1..=100)
+        .map(|i| mix(c, extreme, i as f32 / 100.0))
+        .find(|&m| contrast(m, bg) >= ratio)
+        .unwrap_or(extreme)
 }
 
 /// WCAG contrast ratio between two opaque colours (1 to 21).

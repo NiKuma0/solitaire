@@ -1,8 +1,12 @@
 //! Rounded rectangles and outlines from macroquad's primitives.
 
+use macroquad::camera::{Camera2D, set_camera};
 use macroquad::color::Color;
-use macroquad::math::{Rect, Vec2};
+use macroquad::math::{Rect, Vec2, vec2};
 use macroquad::shapes::{draw_arc, draw_circle, draw_line, draw_rectangle, draw_triangle};
+use macroquad::window::{screen_dpi_scale, screen_height, screen_width};
+
+use super::text::ui_scale;
 
 use super::suit::Shape;
 
@@ -100,4 +104,36 @@ fn corners(r: Rect, radius: f32) -> [(f32, f32); 4] {
         (r.right() - radius, r.bottom() - radius),
         (r.x + radius, r.bottom() - radius),
     ]
+}
+
+/// Limits drawing to `r` (virtual pixels) while keeping the same coordinates.
+pub fn clip_to(r: Rect) {
+    let scale = screen_dpi_scale() * ui_scale();
+    let full_h = screen_height() * screen_dpi_scale();
+    // GL viewports count from the bottom-left corner in physical pixels.
+    let viewport = (
+        (r.x * scale) as i32,
+        (full_h - r.bottom() * scale) as i32,
+        (r.w * scale) as i32,
+        (r.h * scale) as i32,
+    );
+    set_camera(&camera(r, Some(viewport)));
+}
+
+/// The whole window, in virtual pixels: `ui_scale` logical pixels each.
+pub fn ui_camera() {
+    let ui = ui_scale();
+    let r = Rect::new(0.0, 0.0, screen_width() / ui, screen_height() / ui);
+    set_camera(&camera(r, None));
+}
+
+fn camera(r: Rect, viewport: Option<(i32, i32, i32, i32)>) -> Camera2D {
+    let camera = Camera2D::from_display_rect(r);
+    // `from_display_rect` makes y grow upwards; flip it back to screen orientation.
+    let zoom = vec2(camera.zoom.x, -camera.zoom.y);
+    Camera2D {
+        viewport,
+        zoom,
+        ..camera
+    }
 }

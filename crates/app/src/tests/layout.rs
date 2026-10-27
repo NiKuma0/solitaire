@@ -21,21 +21,92 @@ fn screen(w: f32, h: f32) -> Rect {
     Rect::new(0.0, 0.0, w, h)
 }
 
+fn button_rect(l: &Layout, b: Button) -> Rect {
+    l.buttons
+        .iter()
+        .find(|(x, _)| *x == b)
+        .map(|&(_, r)| r)
+        .expect("button")
+}
+
 #[test]
-fn portrait_puts_toolbar_at_the_bottom_landscape_at_the_top() {
-    let p = layout(390.0, 844.0);
-    assert!(p.portrait);
-    assert!(p.toolbar.y > p.columns[0].bottom());
-    let l = layout(1280.0, 720.0);
-    assert!(!l.portrait);
-    assert!(l.toolbar.bottom() <= l.stock.y);
+fn header_on_top_buttons_at_the_bottom_on_every_screen() {
+    for (w, h) in SIZES {
+        let l = layout(w, h);
+        assert_eq!(l.header.y, 0.0, "{w}x{h}");
+        assert!((l.bottom.bottom() - h).abs() < 0.01, "{w}x{h}");
+        assert!(l.header.bottom() <= l.stock.y, "{w}x{h}");
+        assert!(l.columns[0].bottom() <= l.bottom.y, "{w}x{h}");
+    }
+}
+
+#[test]
+fn menu_sits_in_the_header_and_game_buttons_in_the_bottom_bar() {
+    for (w, h) in SIZES {
+        let l = layout(w, h);
+        let menu = button_rect(&l, Button::Settings);
+        assert!(inside(l.header, menu), "{w}x{h}");
+        assert!(menu.center().x < l.status.x, "menu left of the score");
+        let [new, undo, redo] =
+            [Button::New, Button::Undo, Button::Redo].map(|b| button_rect(&l, b));
+        for r in [new, undo, redo] {
+            assert!(inside(l.bottom, r), "{w}x{h}: {r:?}");
+        }
+        assert!(new.x < undo.x && undo.x < redo.x, "{w}x{h}");
+        assert!(
+            (undo.center().x - l.bottom.center().x).abs() < 0.01,
+            "undo centred"
+        );
+    }
+}
+
+#[test]
+fn bars_follow_the_table_on_wide_screens() {
+    let l = layout(2560.0, 1440.0);
+    let table = Rect::new(
+        l.columns[0].x,
+        0.0,
+        l.columns[6].right() - l.columns[0].x,
+        1.0,
+    );
+    assert!(l.header.x >= table.x - 1.0 && l.header.right() <= table.right() + 1.0);
+    assert!((l.bottom.center().x - 1280.0).abs() < 0.01);
+    // Never narrower than a phone, even when the table is.
+    let landscape = layout(640.0, 360.0);
+    assert!(landscape.header.w >= 360.0 - 0.01);
+}
+
+#[test]
+fn auto_complete_floats_between_the_table_and_the_bottom_bar() {
+    for (w, h) in SIZES {
+        let l = layout(w, h);
+        let auto = button_rect(&l, Button::AutoComplete);
+        assert!(auto.bottom() <= l.bottom.y, "{w}x{h}");
+        assert!(auto.y >= l.tableau_bottom, "{w}x{h}");
+        assert!((auto.center().x - l.bottom.center().x).abs() < 0.01);
+    }
+}
+
+#[test]
+fn face_down_cards_make_a_plate_with_a_gap_before_the_open_cards() {
+    let l = layout(390.0, 844.0);
+    let game = solitaire_core::Game::new(7, DrawMode::One);
+    let b = game.board();
+    // Column 3 has 3 face-down cards and 1 face-up card.
+    let s = l.stack(&b.tableau[3]);
+    assert_eq!(s.plate(0), 0.0);
+    assert!(s.plate(1) > s.down && s.plate(3) > s.plate(2));
+    let open = l.card_rect(b, DrawMode::One, PileId::Tableau(3), 3);
+    assert!((open.y - (l.columns[3].y + s.plate(3) + s.gap)).abs() < 0.01);
+    let first = l.card_rect(b, DrawMode::One, PileId::Tableau(0), 0);
+    assert_eq!(first, l.columns[0], "no plate, no gap");
 }
 
 #[test]
 fn every_rect_is_on_screen() {
     for (w, h) in SIZES {
         let l = layout(w, h);
-        let mut rects = vec![l.stock, l.waste, l.toolbar];
+        let mut rects = vec![l.stock, l.waste, l.header, l.bottom];
         rects.extend(l.foundations);
         rects.extend(l.columns);
         rects.extend(l.buttons.iter().map(|&(_, r)| r));
@@ -114,7 +185,8 @@ fn insets_push_content_inwards() {
     };
     let l = Layout::new(vec2(390.0, 844.0), insets);
     assert!(l.foundations[0].y >= 40.0);
-    assert!(l.toolbar.bottom() <= 844.0 - 30.0 + 0.01);
+    assert!(l.bottom.bottom() <= 844.0 - 30.0 + 0.01);
+    assert!(l.header.y >= 40.0);
     assert!(l.columns[0].x >= 10.0);
     assert!(l.columns[6].right() <= 380.0 + 0.01);
 }
@@ -144,14 +216,14 @@ fn tallest_column_fits_above_the_tableau_bottom() {
     for (w, h) in SIZES {
         let l = layout(w, h);
         let col = tall_column();
-        let (down, up) = l.steps(&col);
+        let s = l.stack(&col);
         let face_up = col.len() - col.face_down_count();
-        let height = l.card.y + down * col.face_down_count() as f32 + up * (face_up - 1) as f32;
+        let height = l.card.y + s.plate(6) + s.gap + s.up * (face_up - 1) as f32;
         assert!(
             l.columns[0].y + height <= l.tableau_bottom + 0.01,
             "{w}x{h}"
         );
-        assert!(up > 0.0 && down > 0.0);
+        assert!(s.up > 0.0 && s.down > 0.0);
     }
 }
 
@@ -162,7 +234,8 @@ fn short_columns_use_the_natural_steps() {
         Card::new(Rank::Two, Suit::Clubs),
         Card::new(Rank::Three, Suit::Clubs),
     ]);
-    assert_eq!(l.steps(&col), (l.card.y * DOWN_STEP, l.card.y * UP_STEP));
+    let s = l.stack(&col);
+    assert_eq!((s.down, s.up), (l.card.y * DOWN_STEP, l.card.y * UP_STEP));
 }
 
 #[test]
@@ -174,8 +247,10 @@ fn card_rects_follow_the_piles() {
     let r0 = l.card_rect(b, DrawMode::One, PileId::Tableau(3), 0);
     let r3 = l.card_rect(b, DrawMode::One, PileId::Tableau(3), 3);
     assert_eq!(r0, l.columns[3]);
-    let (down, _) = l.steps(&b.tableau[3]);
-    assert!((r3.y - (r0.y + 3.0 * down)).abs() < 0.01);
+    let s = l.stack(&b.tableau[3]);
+    assert!((r3.y - (r0.y + s.plate(3) + s.gap)).abs() < 0.01);
+    let r2 = l.card_rect(b, DrawMode::One, PileId::Tableau(3), 2);
+    assert!((r2.y - (r0.y + 2.0 * s.down)).abs() < 0.01);
     assert_eq!(l.card_rect(b, DrawMode::One, PileId::Stock, 0), l.stock);
     assert_eq!(
         l.card_rect(b, DrawMode::One, PileId::Foundation(2), 0),
@@ -218,7 +293,8 @@ fn win_button_is_on_screen_and_tappable() {
         let l = layout(w, h);
         assert!(inside(screen(w, h), l.win_button), "{w}x{h}");
         assert!(l.win_button.w >= 44.0 && l.win_button.h >= 44.0);
-        assert!(l.toolbar.intersect(l.win_button).is_none(), "{w}x{h}");
+        assert!(l.bottom.intersect(l.win_button).is_none(), "{w}x{h}");
+        assert!(l.header.intersect(l.win_button).is_none(), "{w}x{h}");
     }
 }
 
@@ -240,7 +316,7 @@ fn every_option_combination_keeps_the_table_on_screen() {
     for (w, h) in SIZES {
         for opts in options() {
             let l = Layout::with_options(vec2(w, h), Insets::default(), opts);
-            let mut rects = vec![l.stock, l.waste, l.toolbar, l.win_button];
+            let mut rects = vec![l.stock, l.waste, l.header, l.bottom, l.win_button];
             rects.extend(l.foundations);
             rects.extend(l.columns);
             rects.extend(l.buttons.iter().map(|&(_, r)| r));
@@ -305,23 +381,16 @@ fn large_cards_are_bigger_with_taller_steps() {
 }
 
 #[test]
-fn toolbar_spans_the_table_on_wide_screens_and_the_screen_on_phones() {
-    let l = layout(2560.0, 1440.0);
-    assert!((l.toolbar.x - l.columns[0].x).abs() < 0.01);
-    assert!((l.toolbar.right() - l.columns[6].right()).abs() < 0.01);
-    let p = layout(390.0, 844.0);
-    assert!((p.toolbar.w - 390.0).abs() < 0.01);
-}
-
-#[test]
-fn settings_button_is_in_the_toolbar() {
+fn theme_button_mirrors_the_menu_button() {
     for (w, h) in SIZES {
         let l = layout(w, h);
-        let settings = l
-            .buttons
-            .iter()
-            .find(|(b, _)| *b == Button::Settings)
-            .expect("settings button");
-        assert!(inside(l.toolbar, settings.1), "{w}x{h}");
+        let menu = button_rect(&l, Button::Settings);
+        let theme = button_rect(&l, Button::Theme);
+        assert!(inside(l.header, theme), "{w}x{h}");
+        assert_eq!(menu.size(), theme.size());
+        let left = menu.center().x - l.header.x;
+        let right = l.header.right() - theme.center().x;
+        assert!((left - right).abs() < 0.01, "{w}x{h}");
+        assert!(theme.x >= l.status.right(), "right of the score");
     }
 }

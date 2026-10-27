@@ -41,6 +41,10 @@ pub struct Settings {
     pub tap_to_move: bool,
     pub left_handed: bool,
     pub large_cards: bool,
+    /// Numbers on the stock and the face-down plates.
+    pub card_count: bool,
+    /// A faint shadow under each card.
+    pub separated: bool,
 }
 
 impl Default for Settings {
@@ -53,6 +57,8 @@ impl Default for Settings {
             tap_to_move: true,
             left_handed: false,
             large_cards: false,
+            card_count: true,
+            separated: false,
         }
     }
 }

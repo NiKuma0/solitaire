@@ -72,7 +72,7 @@ pub fn placements(layout: &Layout, game: &Game, drag: Option<&Drag>) -> Vec<Plac
             PileId::Tableau(i) => board
                 .tableau
                 .get(usize::from(i))
-                .map_or(0.0, |col| layout.steps(col).1),
+                .map_or(0.0, |col| layout.stack(col).up),
             _ => 0.0,
         };
         for (k, card) in lifted.into_iter().enumerate() {
