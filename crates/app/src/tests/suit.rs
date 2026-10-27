@@ -3,7 +3,7 @@
 use macroquad::math::{Vec2, vec2};
 use solitaire_core::{Rank, Suit};
 
-use super::*;
+use crate::render::suit::*;
 
 /// Bounding box of all shapes: (min, max).
 fn bounds(shapes: &[Shape]) -> (Vec2, Vec2) {

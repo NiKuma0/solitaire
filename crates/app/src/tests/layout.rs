@@ -221,3 +221,107 @@ fn win_button_is_on_screen_and_tappable() {
         assert!(l.toolbar.intersect(l.win_button).is_none(), "{w}x{h}");
     }
 }
+
+fn options() -> [LayoutOptions; 4] {
+    [false, true]
+        .map(|left_handed| {
+            [false, true].map(move |large_cards| LayoutOptions {
+                left_handed,
+                large_cards,
+            })
+        })
+        .concat()
+        .try_into()
+        .expect("four combinations")
+}
+
+#[test]
+fn every_option_combination_keeps_the_table_on_screen() {
+    for (w, h) in SIZES {
+        for opts in options() {
+            let l = Layout::with_options(vec2(w, h), Insets::default(), opts);
+            let mut rects = vec![l.stock, l.waste, l.toolbar, l.win_button];
+            rects.extend(l.foundations);
+            rects.extend(l.columns);
+            rects.extend(l.buttons.iter().map(|&(_, r)| r));
+            for r in rects {
+                assert!(inside(screen(w, h), r), "{w}x{h} {opts:?}: {r:?}");
+            }
+            for pair in l.columns.windows(2) {
+                assert!(pair[0].right() < pair[1].x, "{w}x{h} {opts:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn left_handed_puts_the_stock_on_the_left() {
+    let opts = LayoutOptions {
+        left_handed: true,
+        large_cards: false,
+    };
+    let l = Layout::with_options(vec2(390.0, 844.0), Insets::default(), opts);
+    assert_eq!(l.stock.x, l.columns[0].x);
+    assert!(l.foundations.iter().all(|f| f.x > l.stock.right()));
+    assert_eq!(l.foundations[3].x, l.columns[6].x);
+
+    // The Draw 3 fan opens towards the stock and stays clear of it and the foundations.
+    let board = Board {
+        waste: [Rank::Two, Rank::Three, Rank::Four]
+            .map(|r| Card::new(r, Suit::Clubs))
+            .to_vec(),
+        ..Board::default()
+    };
+    let top = l.card_rect(&board, DrawMode::Three, PileId::Waste, 2);
+    let bottom = l.card_rect(&board, DrawMode::Three, PileId::Waste, 0);
+    assert!(top.x < bottom.x, "fans towards the stock");
+    assert!(top.x > l.stock.right());
+    assert!(bottom.right() < l.foundations[0].x);
+}
+
+#[test]
+fn right_handed_puts_the_stock_on_the_right() {
+    let l = layout(390.0, 844.0);
+    assert_eq!(l.stock.x, l.columns[6].x);
+    assert_eq!(l.foundations[0].x, l.columns[0].x);
+}
+
+#[test]
+fn large_cards_are_bigger_with_taller_steps() {
+    for (w, h) in [(390.0, 844.0), (1280.0, 720.0), (640.0, 360.0)] {
+        let normal = layout(w, h);
+        let large = Layout::with_options(
+            vec2(w, h),
+            Insets::default(),
+            LayoutOptions {
+                left_handed: false,
+                large_cards: true,
+            },
+        );
+        assert!(large.card.x > normal.card.x, "{w}x{h}");
+        assert!(large.up_step > normal.up_step);
+        assert!(large.large_cards && !normal.large_cards);
+    }
+}
+
+#[test]
+fn toolbar_spans_the_table_on_wide_screens_and_the_screen_on_phones() {
+    let l = layout(2560.0, 1440.0);
+    assert!((l.toolbar.x - l.columns[0].x).abs() < 0.01);
+    assert!((l.toolbar.right() - l.columns[6].right()).abs() < 0.01);
+    let p = layout(390.0, 844.0);
+    assert!((p.toolbar.w - 390.0).abs() < 0.01);
+}
+
+#[test]
+fn settings_button_is_in_the_toolbar() {
+    for (w, h) in SIZES {
+        let l = layout(w, h);
+        let settings = l
+            .buttons
+            .iter()
+            .find(|(b, _)| *b == Button::Settings)
+            .expect("settings button");
+        assert!(inside(l.toolbar, settings.1), "{w}x{h}");
+    }
+}

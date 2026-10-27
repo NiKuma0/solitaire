@@ -67,7 +67,3 @@ pub const fn rank_label(rank: Rank) -> &'static str {
         Rank::King => "K",
     }
 }
-
-#[cfg(test)]
-#[path = "../tests/suit.rs"]
-mod tests;

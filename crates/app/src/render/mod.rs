@@ -160,6 +160,7 @@ const fn button_label(button: Button) -> &'static str {
         Button::Undo => "Undo",
         Button::Redo => "Redo",
         Button::AutoComplete => "Auto",
+        Button::Settings => "Menu",
     }
 }
 

@@ -29,8 +29,15 @@ impl Drag {
     }
 }
 
+/// Things the rest of the app reacts to, drained once per frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Event {
+    OpenSettings,
+}
+
 pub struct Table {
     game: Game,
+    events: Vec<Event>,
     layout: Layout,
     drag: Option<Drag>,
     next_seed: u64,
@@ -44,6 +51,7 @@ impl Table {
     pub fn new(game: Game, screen: Vec2, insets: Insets, next_seed: u64) -> Self {
         let mut table = Self {
             game,
+            events: Vec::new(),
             layout: Layout::new(screen, insets),
             drag: None,
             next_seed,
@@ -74,6 +82,11 @@ impl Table {
         self.stuck
     }
 
+    /// Events since the last call.
+    pub fn drain_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.events)
+    }
+
     pub fn resize(&mut self, screen: Vec2, insets: Insets) {
         if self.layout.screen != screen {
             self.layout = Layout::new(screen, insets);
@@ -83,7 +96,7 @@ impl Table {
     #[must_use]
     pub fn is_enabled(&self, button: Button) -> bool {
         match button {
-            Button::New => true,
+            Button::New | Button::Settings => true,
             Button::Undo => self.game.can_undo(),
             Button::Redo => self.game.can_redo(),
             Button::AutoComplete => self.can_auto_complete,
@@ -95,6 +108,7 @@ impl Table {
             return;
         }
         match button {
+            Button::Settings => self.events.push(Event::OpenSettings),
             Button::New => self.new_game(),
             Button::Undo => {
                 let _ = self.game.undo();

@@ -1,6 +1,37 @@
 //! Colours. Full themes arrive in M3; for now there is one palette.
 
 use macroquad::color::Color;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ThemeId {
+    Light,
+    Dark,
+    Black,
+    Warm,
+    HighContrast,
+}
+
+impl ThemeId {
+    pub const ALL: [Self; 5] = [
+        Self::Light,
+        Self::Dark,
+        Self::Black,
+        Self::Warm,
+        Self::HighContrast,
+    ];
+
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+            Self::Black => "Black",
+            Self::Warm => "Warm",
+            Self::HighContrast => "High contrast",
+        }
+    }
+}
 
 /// Table colour as sRGB bytes.
 pub const TABLE_RGB: [u8; 3] = [0x2f, 0x5d, 0x50];

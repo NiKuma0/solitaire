@@ -356,3 +356,13 @@ fn resize_recomputes_the_layout() {
     assert!(!t.layout().portrait);
     assert_eq!(t.layout().screen, vec2(1280.0, 720.0));
 }
+
+#[test]
+fn settings_button_asks_to_open_settings() {
+    let mut t = table(Game::new(1, DrawMode::One), 390.0, 844.0);
+    assert_eq!(t.drain_events(), []);
+    let p = button_center(&t, Button::Settings);
+    tap(&mut t, p);
+    assert_eq!(t.drain_events(), [Event::OpenSettings]);
+    assert_eq!(t.drain_events(), [], "drained");
+}

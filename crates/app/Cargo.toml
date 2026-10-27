@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 solitaire-core.workspace = true
 macroquad.workspace = true
+serde = { version = "1.0.229", features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1.0.154"
