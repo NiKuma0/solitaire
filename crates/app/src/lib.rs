@@ -20,7 +20,7 @@ pub mod storage;
 pub mod table;
 pub mod theme;
 
-pub use theme::TABLE_HEX;
+pub use theme::PAGE_HEX;
 
 #[cfg(test)]
 #[path = "tests/support.rs"]

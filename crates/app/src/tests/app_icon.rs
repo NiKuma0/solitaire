@@ -24,31 +24,25 @@ fn corners_are_transparent_and_the_middle_is_opaque() {
     assert_eq!(pixel(&img, size, size / 2, size / 2)[3], 255);
 }
 
+fn rgb_at(img: &[u8], size: u32, fx: f32, fy: f32) -> [u8; 3] {
+    let [r, g, b, _] = pixel(
+        img,
+        size,
+        (fx * size as f32) as u32,
+        (fy * size as f32) as u32,
+    );
+    [r, g, b]
+}
+
 #[test]
-fn shows_a_red_heart_on_a_light_card_on_the_table() {
+fn shows_an_accent_heart_on_a_card_in_the_default_theme() {
     let size = 128;
     let img = rgba(size);
-    let [r, g, b, _] = pixel(
-        &img,
-        size,
-        (HEART.0 * size as f32) as u32,
-        (HEART.1 * size as f32) as u32,
-    );
-    assert!(r > 150 && g < 100 && b < 100, "heart is red: {r},{g},{b}");
-    let [r, g, b, _] = pixel(
-        &img,
-        size,
-        (0.30 * size as f32) as u32,
-        (0.80 * size as f32) as u32,
-    );
-    assert!(r > 230 && g > 230 && b > 230, "card is light: {r},{g},{b}");
-    let [r, g, b, _] = pixel(
-        &img,
-        size,
-        (0.90 * size as f32) as u32,
-        (0.50 * size as f32) as u32,
-    );
-    assert_eq!([r, g, b], crate::theme::TABLE_RGB, "table green");
+    let p = crate::theme::palette(crate::theme::ThemeId::Dark);
+    assert_eq!(rgb_at(&img, size, HEART.0, HEART.1), bytes(p.red), "heart");
+    assert_eq!(rgb_at(&img, size, 0.30, 0.80), bytes(p.face), "card face");
+    assert_eq!(rgb_at(&img, size, 0.70, 0.20), bytes(p.accent), "card back");
+    assert_eq!(rgb_at(&img, size, 0.90, 0.50), bytes(p.bg), "background");
 }
 
 #[test]

@@ -105,7 +105,7 @@ fn applying_hits_changes_settings() {
     let mut s = Settings::default();
     assert!(apply(&mut s, MenuHit::Choose(Row::Draw, 1)));
     assert_eq!(s.draw, DrawMode::Three);
-    assert!(apply(&mut s, MenuHit::Choose(Row::Theme, 4)));
+    assert!(apply(&mut s, MenuHit::Choose(Row::Theme, 7)));
     assert_eq!(s.theme, ThemeId::HighContrast);
     assert!(apply(&mut s, MenuHit::Choose(Row::Animation, 0)));
     assert_eq!(s.animation, AnimSpeed::Off);

@@ -5,3 +5,6 @@
 /PROMPT.md
 /.playwright-mcp
 /crates/app/android-res
+/frames
+/klondike-reference.html
+/prompt-klondike-design.md

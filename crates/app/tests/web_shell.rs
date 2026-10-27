@@ -74,7 +74,7 @@ fn web_shell_references_no_external_urls() {
 fn page_background_matches_table_colour() {
     // Avoids a colour flash between page load and the first frame.
     let html = web_file("index.html");
-    let table = solitaire_app::TABLE_HEX;
+    let table = solitaire_app::PAGE_HEX;
     assert!(
         html.contains(&format!("background: {table};")),
         "body background"

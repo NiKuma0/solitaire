@@ -17,10 +17,10 @@ use crate::fonts::Fonts;
 use crate::layout::{Button, Layout};
 use crate::scene::placements;
 use crate::table::Table;
-use crate::theme::Palette;
+use crate::theme::{Palette, faded};
 use card::{draw_back, draw_face, draw_slot};
 use icon::icon_shapes;
-use shapes::{fill_rounded, fill_shapes, stroke_circle};
+use shapes::{fill_rounded, fill_shapes, stroke_circle, stroke_rounded};
 use text::{Align, draw_label};
 
 /// What every drawing helper needs.
@@ -42,7 +42,7 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
         large: l.large_cards,
     };
     prewarm_text(fonts, l);
-    clear_background(ctx.palette.table);
+    clear_background(ctx.palette.bg);
     draw_slots(table, &ctx);
 
     let game = table.game();
@@ -116,9 +116,8 @@ fn draw_slots(table: &Table, ctx: &Ctx) {
 
 fn draw_toolbar(table: &Table, save_failed: bool, ctx: &Ctx) {
     let l = table.layout();
-    let r = l.toolbar;
+
     let p = &ctx.palette;
-    draw_rectangle(r.x, r.y, r.w, r.h, p.toolbar);
 
     let board = table.game().board();
     let size = 15.0;
@@ -128,16 +127,16 @@ fn draw_toolbar(table: &Table, save_failed: bool, ctx: &Ctx) {
         &format!("Score {}", board.score),
         line(-1.0),
         size,
-        p.ui_text,
+        p.text,
         Align::Left,
         font,
     );
     let (second, color) = if save_failed {
-        ("Not saved".to_owned(), p.ui_text)
+        ("Not saved".to_owned(), p.text)
     } else if table.is_stuck() {
-        ("No moves left".to_owned(), p.ui_text)
+        ("No moves left".to_owned(), p.text)
     } else {
-        (format!("Moves {}", board.moves), p.ui_text_dim)
+        (format!("Moves {}", board.moves), p.muted)
     };
     draw_label(&second, line(1.0), size, color, Align::Left, font);
 
@@ -147,46 +146,33 @@ fn draw_toolbar(table: &Table, save_failed: bool, ctx: &Ctx) {
         if button == Button::AutoComplete && !enabled {
             continue;
         }
-        let (bg, fg) = if button == Button::AutoComplete {
-            (p.accent, p.accent_text)
+        let fg = if button == Button::AutoComplete {
+            fill_rounded(rect, 10.0, p.accent);
+            p.on
         } else {
-            (p.button, if enabled { p.ui_text } else { p.ui_text_dim })
+            stroke_rounded(rect, 10.0, 1.0, p.line);
+            if enabled { p.text } else { p.disabled }
         };
-        fill_rounded(rect, 10.0, bg);
         fill_shapes(&icon_shapes(button, rect.center(), 22.0), fg);
     }
 }
 
 fn draw_win(l: &Layout, score: u32, ctx: &Ctx) {
     let p = &ctx.palette;
-    draw_rectangle(0.0, 0.0, l.screen.x, l.screen.y, p.overlay);
+    draw_rectangle(0.0, 0.0, l.screen.x, l.screen.y, faded(p.bg, 0.9));
     let b = l.win_button;
     let bold = ctx.fonts.semibold.as_ref();
     let center = |dy: f32| Vec2::new(b.center().x, b.y + dy);
-    draw_label(
-        "You won!",
-        center(-64.0),
-        32.0,
-        p.ui_text,
-        Align::Center,
-        bold,
-    );
+    draw_label("You won!", center(-64.0), 32.0, p.text, Align::Center, bold);
     let regular = ctx.fonts.regular.as_ref();
     draw_label(
         &format!("Score {score}"),
         center(-28.0),
         18.0,
-        p.ui_text,
+        p.text,
         Align::Center,
         regular,
     );
     fill_rounded(b, 12.0, p.accent);
-    draw_label(
-        "New game",
-        b.center(),
-        18.0,
-        p.accent_text,
-        Align::Center,
-        bold,
-    );
+    draw_label("New game", b.center(), 18.0, p.on, Align::Center, bold);
 }

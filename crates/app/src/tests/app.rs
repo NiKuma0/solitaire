@@ -71,7 +71,7 @@ fn choosing_a_theme_crossfades_to_it() {
     let mut a = app(390.0, 844.0, Settings::default());
     let p = button(&a, Button::Settings);
     tap(&mut a, p, 1.0);
-    let light = row_target(&a, Row::Theme, 0);
+    let light = row_target(&a, Row::Theme, 1);
     tap(&mut a, light, 2.0);
     assert_eq!(a.settings().theme, ThemeId::Light);
     let start = a.palette(2.0);

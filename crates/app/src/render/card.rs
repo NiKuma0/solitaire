@@ -19,12 +19,9 @@ fn squeeze(r: Rect, scale_x: f32) -> Rect {
     Rect::new(r.center().x - w / 2.0, r.y, w, r.h)
 }
 
-/// The card body: a one-pixel edge around a filled rounded rect.
-fn body(r: Rect, fill: macroquad::color::Color, ctx: &Ctx) -> Rect {
-    fill_rounded(r, radius(r), ctx.palette.card_edge);
-    let inner = Rect::new(r.x + 1.0, r.y + 1.0, (r.w - 2.0).max(0.0), r.h - 2.0);
-    fill_rounded(inner, radius(inner), fill);
-    inner
+/// The card body: a flat rounded rect.
+fn body(r: Rect, fill: macroquad::color::Color) {
+    fill_rounded(r, radius(r), fill);
 }
 
 /// Text size of the rank in a card's corner.
@@ -34,7 +31,7 @@ pub fn rank_size(card_width: f32, large: bool) -> f32 {
 
 pub fn draw_face(card: Card, r: Rect, scale_x: f32, ctx: &Ctx) {
     let r = squeeze(r, scale_x);
-    body(r, ctx.palette.card_face, ctx);
+    body(r, ctx.palette.face);
     // Mid-turn the face is too narrow for its print; the body alone reads fine.
     if scale_x < 0.999 {
         return;
@@ -65,19 +62,9 @@ pub fn draw_face(card: Card, r: Rect, scale_x: f32, ctx: &Ctx) {
 
 pub fn draw_back(r: Rect, scale_x: f32, ctx: &Ctx) {
     let r = squeeze(r, scale_x);
-    let back = body(r, ctx.palette.card_back, ctx);
-    let inset = r.w.min(r.h / 1.4) * 0.09;
-    if back.w > 2.0 * inset + 2.0 {
-        let trim = Rect::new(
-            back.x + inset,
-            back.y + inset,
-            back.w - 2.0 * inset,
-            back.h - 2.0 * inset,
-        );
-        stroke_rounded(trim, radius(trim), 1.5, ctx.palette.card_back_trim);
-    }
+    body(r, ctx.palette.accent);
 }
 
 pub fn draw_slot(r: Rect, ctx: &Ctx) {
-    stroke_rounded(r, radius(r), 1.5, ctx.palette.slot);
+    stroke_rounded(r, radius(r), 1.0, ctx.palette.slot);
 }

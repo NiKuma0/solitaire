@@ -17,22 +17,24 @@ use crate::menu::{
 };
 use crate::settings::Settings;
 use crate::stats::{Stats, utc_date};
+use crate::theme::faded;
 
 pub fn draw(view: MenuView, settings: Settings, stats: &Stats, ctx: &Ctx) {
     let m = view.menu;
     let p = &ctx.palette;
-    draw_rectangle(-1.0, -1.0, 1.0e5, 1.0e5, p.overlay);
-    fill_rounded(m.panel, 16.0, p.panel);
+    draw_rectangle(-1.0, -1.0, 1.0e5, 1.0e5, faded(p.bg, 0.9));
+    fill_rounded(m.panel, 16.0, p.bg);
+    stroke_rounded(m.panel, 16.0, 1.0, p.line);
 
     let bold = ctx.fonts.semibold.as_ref();
     for (tab, r) in m.tabs {
         if tab == view.tab {
-            fill_rounded(r, 10.0, faded(p.panel_text, 0.15));
+            fill_rounded(r, 10.0, faded(p.text, 0.15));
         }
         let color = if tab == view.tab {
-            p.panel_text
+            p.text
         } else {
-            faded(p.panel_text, 0.6)
+            faded(p.text, 0.6)
         };
         draw_label(
             tab.label(),
@@ -44,14 +46,7 @@ pub fn draw(view: MenuView, settings: Settings, stats: &Stats, ctx: &Ctx) {
         );
     }
     fill_rounded(m.done, 10.0, p.accent);
-    draw_label(
-        "Done",
-        m.done.center(),
-        16.0,
-        p.accent_text,
-        Align::Center,
-        bold,
-    );
+    draw_label("Done", m.done.center(), 16.0, p.on, Align::Center, bold);
 
     // Content scrolls under the title bar: clip it to the viewport.
     clip_to(m.viewport);
@@ -77,7 +72,7 @@ fn draw_settings(m: &Menu, scroll: f32, settings: Settings, confirm_reset: bool,
             row.row.label(),
             at,
             LABEL_SIZE,
-            p.panel_text,
+            p.text,
             Align::Left,
             regular,
         );
@@ -90,12 +85,12 @@ fn draw_settings(m: &Menu, scroll: f32, settings: Settings, confirm_reset: bool,
             if confirming {
                 fill_rounded(r, 10.0, p.accent);
             } else {
-                stroke_rounded(r, 10.0, 1.5, faded(p.panel_text, 0.6));
+                stroke_rounded(r, 10.0, 1.5, faded(p.text, 0.6));
             }
             let (text, color) = if confirming {
-                ("Confirm", p.accent_text)
+                ("Confirm", p.on)
             } else {
-                (text, p.panel_text)
+                (text, p.text)
             };
             draw_label(text, r.center(), LABEL_SIZE, color, Align::Center, regular);
         } else {
@@ -105,9 +100,9 @@ fn draw_settings(m: &Menu, scroll: f32, settings: Settings, confirm_reset: bool,
                 if on {
                     fill_rounded(r, 10.0, p.accent);
                 } else {
-                    stroke_rounded(r, 10.0, 1.5, faded(p.panel_text, 0.6));
+                    stroke_rounded(r, 10.0, 1.5, faded(p.text, 0.6));
                 }
-                let fg = if on { p.accent_text } else { p.panel_text };
+                let fg = if on { p.on } else { p.text };
                 draw_label(option, r.center(), LABEL_SIZE, fg, Align::Center, regular);
             }
         }
@@ -115,11 +110,7 @@ fn draw_settings(m: &Menu, scroll: f32, settings: Settings, confirm_reset: bool,
     let about = up(m.about);
     for (i, line) in ABOUT_LINES.iter().enumerate() {
         let y = about.y + 16.0 + ABOUT_LINE * (i as f32 + 0.5);
-        let color = if i == 0 {
-            p.panel_text
-        } else {
-            faded(p.panel_text, 0.6)
-        };
+        let color = if i == 0 { p.text } else { faded(p.text, 0.6) };
         draw_label(line, vec2(about.x, y), 14.0, color, Align::Left, regular);
     }
 }
@@ -147,21 +138,14 @@ fn draw_table(table: Rect, stats: &Stats, ctx: &Ctx) {
             table.y + TABLE_ROW * (row as f32 + 0.5),
         )
     };
-    let dim = faded(palette.panel_text, 0.6);
+    let dim = faded(palette.text, 0.6);
     for (col, heading) in ["Draw 1", "Draw 3", "All"].iter().enumerate() {
         draw_label(heading, cell(0, col), 14.0, dim, Align::Center, regular);
     }
     let tallies = [Some(DrawMode::One), Some(DrawMode::Three), None].map(|d| stats.tally(d));
     for (row, label) in ["Played", "Won", "Win rate"].iter().enumerate() {
         let at = vec2(table.x, table.y + TABLE_ROW * (row as f32 + 1.5));
-        draw_label(
-            label,
-            at,
-            LABEL_SIZE,
-            palette.panel_text,
-            Align::Left,
-            regular,
-        );
+        draw_label(label, at, LABEL_SIZE, palette.text, Align::Left, regular);
         for (col, &tally) in tallies.iter().enumerate() {
             let value = match row {
                 0 => tally.played.to_string(),
@@ -174,7 +158,7 @@ fn draw_table(table: Rect, stats: &Stats, ctx: &Ctx) {
                 &value,
                 cell(row + 1, col),
                 LABEL_SIZE,
-                palette.panel_text,
+                palette.text,
                 Align::Center,
                 bold,
             );
@@ -197,7 +181,7 @@ fn draw_facts(facts: Rect, stats: &Stats, ctx: &Ctx) {
             label,
             vec2(facts.x, y),
             LABEL_SIZE,
-            palette.panel_text,
+            palette.text,
             Align::Left,
             regular,
         );
@@ -206,7 +190,7 @@ fn draw_facts(facts: Rect, stats: &Stats, ctx: &Ctx) {
             &value.to_string(),
             right,
             LABEL_SIZE,
-            palette.panel_text,
+            palette.text,
             Align::Center,
             bold,
         );
@@ -218,13 +202,13 @@ fn draw_history(title: Rect, rows: &[Rect], stats: &Stats, ctx: &Ctx) {
     let palette = &ctx.palette;
     let regular = ctx.fonts.regular.as_ref();
     let bold = ctx.fonts.semibold.as_ref();
-    let dim = faded(palette.panel_text, 0.6);
+    let dim = faded(palette.text, 0.6);
     let heading = vec2(title.x, title.center().y);
     draw_label(
         "Recent games",
         heading,
         LABEL_SIZE,
-        palette.panel_text,
+        palette.text,
         Align::Left,
         bold,
     );
@@ -249,7 +233,7 @@ fn draw_history(title: Rect, rows: &[Rect], stats: &Stats, ctx: &Ctx) {
             "Draw 3"
         };
         let (result, color) = if record.won {
-            ("Won", palette.panel_text)
+            ("Won", palette.text)
         } else {
             ("Lost", dim)
         };
@@ -274,7 +258,7 @@ fn draw_history(title: Rect, rows: &[Rect], stats: &Stats, ctx: &Ctx) {
             &record.score.to_string(),
             score,
             14.0,
-            palette.panel_text,
+            palette.text,
             Align::Center,
             bold,
         );
@@ -299,14 +283,14 @@ fn draw_chart(area: Rect, stats: &Stats, ctx: &Ctx) {
         &heading,
         vec2(area.x, area.y + 11.0),
         LABEL_SIZE,
-        p.panel_text,
+        p.text,
         Align::Left,
         bold,
     );
     let bars = Rect::new(area.x, area.y + 28.0, area.w, area.h - 28.0);
     let games: Vec<_> = stats.recent(CHART_GAMES).collect();
     if games.is_empty() {
-        let dim = faded(p.panel_text, 0.6);
+        let dim = faded(p.text, 0.6);
         draw_label(
             "No games yet",
             vec2(bars.x, bars.center().y),
@@ -317,24 +301,16 @@ fn draw_chart(area: Rect, stats: &Stats, ctx: &Ctx) {
         );
         return;
     }
-    draw_rectangle(bars.x, bars.bottom(), bars.w, 1.0, faded(p.panel_text, 0.3));
+    draw_rectangle(bars.x, bars.bottom(), bars.w, 1.0, faded(p.text, 0.3));
     let max = games.iter().map(|g| g.score).max().unwrap_or(0).max(1) as f32;
     let slot = bars.w / CHART_GAMES as f32;
     for (i, g) in games.iter().enumerate() {
         // Zero-score games still show a sliver so every game is visible.
         let h = (g.score as f32 / max * bars.h).max(2.0);
-        let color = if g.won {
-            p.accent
-        } else {
-            faded(p.panel_text, 0.35)
-        };
+        let color = if g.won { p.accent } else { faded(p.text, 0.35) };
         let x = bars.x + slot * i as f32 + slot * 0.15;
         draw_rectangle(x, bars.bottom() - h, slot * 0.7, h, color);
     }
-}
-
-fn faded(c: macroquad::color::Color, alpha: f32) -> macroquad::color::Color {
-    macroquad::color::Color::new(c.r, c.g, c.b, c.a * alpha)
 }
 
 fn draw_switch(target: Rect, on: bool, ctx: &Ctx) {
@@ -348,18 +324,14 @@ fn draw_switch(target: Rect, on: bool, ctx: &Ctx) {
     if on {
         fill_rounded(track, 14.0, p.accent);
     } else {
-        stroke_rounded(track, 14.0, 1.5, faded(p.panel_text, 0.6));
+        stroke_rounded(track, 14.0, 1.5, faded(p.text, 0.6));
     }
     let knob_x = if on {
         track.right() - 14.0
     } else {
         track.x + 14.0
     };
-    let knob = if on {
-        p.accent_text
-    } else {
-        faded(p.panel_text, 0.6)
-    };
+    let knob = if on { p.on } else { faded(p.text, 0.6) };
     macroquad::shapes::draw_circle(knob_x, track.center().y, 10.0, knob);
 }
 
