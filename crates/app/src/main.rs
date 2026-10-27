@@ -29,7 +29,7 @@ async fn main() {
         table.resize(screen(), Insets::default());
         handle_pointer(&mut table, &mut pointer);
         handle_keys(&mut table);
-        render::draw(&table, &theme::PALETTE);
+        render::draw(&table, &theme::palette(theme::ThemeId::Dark));
         next_frame().await;
     }
 }
