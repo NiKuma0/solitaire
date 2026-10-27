@@ -10,6 +10,7 @@ pub mod gesture;
 pub mod hit;
 pub mod layout;
 pub mod menu;
+pub mod persist;
 pub mod render;
 pub mod scene;
 pub mod settings;
