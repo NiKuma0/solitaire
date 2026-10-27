@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod anim;
+pub mod app;
 pub mod config;
 pub mod fonts;
 pub mod gesture;
