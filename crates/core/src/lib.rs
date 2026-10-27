@@ -10,6 +10,7 @@ pub mod deal;
 pub mod game;
 pub mod moves;
 pub mod pile;
+pub mod save;
 pub mod score;
 pub mod tap;
 
@@ -17,6 +18,7 @@ pub use card::{Card, Color, Rank, Suit};
 pub use game::{Board, DrawMode, Game};
 pub use moves::{Move, MoveError, MoveOutcome};
 pub use pile::{Column, PileId};
+pub use save::LoadError;
 
 /// Crate version, shown on the About screen.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

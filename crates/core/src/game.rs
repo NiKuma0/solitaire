@@ -40,7 +40,7 @@ pub struct Board {
 
 /// What undo needs beyond the move itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-struct Record {
+pub(crate) struct Record {
     mv: Move,
     /// Cards turned by a `Draw`.
     drawn: u8,
@@ -48,13 +48,15 @@ struct Record {
     score_before: u32,
 }
 
+/// A game in progress. Deserializing checks the save (see [`crate::save`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "crate::save::GameData")]
 pub struct Game {
-    seed: u64,
-    draw: DrawMode,
-    board: Board,
-    undo: Vec<Record>,
-    redo: Vec<Move>,
+    pub(crate) seed: u64,
+    pub(crate) draw: DrawMode,
+    pub(crate) board: Board,
+    pub(crate) undo: Vec<Record>,
+    pub(crate) redo: Vec<Move>,
 }
 
 impl Game {
