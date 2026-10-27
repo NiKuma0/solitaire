@@ -20,7 +20,7 @@ pub enum PileId {
 /// A tableau column: a run of face-down cards with face-up cards on top.
 ///
 /// The last card of `cards` is the top of the column.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Column {
     cards: Vec<Card>,
     face_down: usize,

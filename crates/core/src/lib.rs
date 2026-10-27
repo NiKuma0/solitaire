@@ -12,6 +12,7 @@ pub mod moves;
 pub mod pile;
 pub mod save;
 pub mod score;
+pub mod stuck;
 pub mod tap;
 
 pub use card::{Card, Color, Rank, Suit};

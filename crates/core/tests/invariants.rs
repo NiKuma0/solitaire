@@ -97,6 +97,28 @@ proptest! {
     }
 }
 
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    /// Every state reachable from a dead end is a dead end too.
+    #[test]
+    fn stuck_is_closed_under_moves(
+        seed in any::<u64>(),
+        draw in draw_mode(),
+        choices in prop::collection::vec(any::<Index>(), 0..200),
+    ) {
+        let game = play(seed, draw, &choices)?;
+        let moves = game.legal_moves();
+        if game.is_stuck() {
+            for mv in moves {
+                let mut next = game.clone();
+                next.apply(mv).map_err(|e| TestCaseError::fail(e.to_string()))?;
+                prop_assert!(next.is_stuck(), "{mv:?} escaped a dead end");
+            }
+        }
+    }
+}
+
 /// A greedy player reaches auto-complete in some deals; every plan offered must win.
 #[test]
 fn auto_complete_plans_always_win() {

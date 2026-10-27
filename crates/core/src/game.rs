@@ -25,7 +25,7 @@ impl DrawMode {
 }
 
 /// Everything visible on the table. Undo restores it exactly.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Board {
     /// The last card is the top of the stock.
     pub stock: Vec<Card>,
