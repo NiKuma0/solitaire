@@ -4,6 +4,7 @@
 
 pub mod anim;
 pub mod app;
+pub mod app_icon;
 pub mod config;
 pub mod fonts;
 pub mod gesture;

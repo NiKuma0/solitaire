@@ -639,6 +639,7 @@ name = "solitaire-app"
 version = "0.1.0"
 dependencies = [
  "macroquad",
+ "png",
  "serde",
  "serde_json",
  "solitaire-core",

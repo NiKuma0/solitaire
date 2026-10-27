@@ -1,5 +1,8 @@
 //! Solitaire app entry point: input plumbing and the main loop.
 
+// Release builds on Windows open no console window next to the game.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use macroquad::input::{
     KeyCode, MouseButton, is_key_down, is_key_pressed, is_mouse_button_down,
     is_mouse_button_pressed, is_mouse_button_released, mouse_position,
