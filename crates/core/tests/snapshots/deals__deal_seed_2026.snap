@@ -1,0 +1,12 @@
+---
+source: crates/core/tests/deals.rs
+expression: render(seed)
+---
+T1: 7C
+T2: [AC] JH
+T3: [QC] [3H] 5C
+T4: [AH] [9H] [5D] JS
+T5: [4H] [QD] [7D] [TS] 5S
+T6: [KH] [TH] [6S] [6D] [3S] 7S
+T7: [KC] [6C] [QS] [KD] [2D] [7H] JC
+stock: 5H TC 6H 2S 3D 8H 3C AS QH 9D 4S 8C 4C KS 2H 9S JD 8S AD 8D 4D TD 9C 2C
