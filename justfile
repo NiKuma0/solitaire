@@ -9,7 +9,7 @@ default:
     @just --list
 
 # Everything CI runs: formatting, lints, tests, dependency policy.
-check: fmt-check clippy test deny shear
+check: fmt-check clippy test deny shear wasm-link
 
 fmt:
     cargo fmt --all
@@ -29,6 +29,10 @@ deny:
 
 shear:
     cargo shear
+
+# Clippy does not link; this catches missing wasm imports before deploy.
+wasm-link:
+    cargo build -p solitaire-app --target wasm32-unknown-unknown --locked
 
 # Line coverage of core code (test folders excluded); fails below SPEC §10. Needs cargo-llvm-cov.
 cov:
