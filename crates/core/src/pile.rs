@@ -34,9 +34,10 @@ impl Column {
         Self { cards, face_down }
     }
 
-    /// A column with an explicit face-down count, for building test positions.
-    #[cfg(test)]
-    pub(crate) fn from_parts(cards: Vec<Card>, face_down: usize) -> Self {
+    /// A column with an explicit face-down count. Not checked: use
+    /// [`crate::Board::validate`] when the parts come from outside.
+    #[must_use]
+    pub fn from_parts(cards: Vec<Card>, face_down: usize) -> Self {
         Self { cards, face_down }
     }
 
