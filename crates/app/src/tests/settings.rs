@@ -15,6 +15,8 @@ fn defaults() {
     assert!(s.tap_to_move);
     assert!(!s.left_handed);
     assert!(!s.large_cards);
+    assert!(s.card_count);
+    assert!(!s.separated);
 }
 
 #[test]
@@ -34,6 +36,8 @@ fn round_trips_and_tolerates_missing_fields() {
         tap_to_move: false,
         left_handed: true,
         large_cards: true,
+        card_count: false,
+        separated: true,
     };
     let json = serde_json::to_string(&s).unwrap();
     assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), s);

@@ -291,7 +291,7 @@ fn auto_complete_button_finishes_the_game_and_win_button_starts_a_new_one() {
     assert!(!t.is_enabled(Button::AutoComplete));
 
     let before = t.game().board().clone();
-    let p = t.layout().columns[3].center();
+    let p = t.layout().foundations[0].center();
     tap(&mut t, p);
     assert_eq!(t.game().board(), &before, "the table is frozen once won");
 

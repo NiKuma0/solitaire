@@ -24,6 +24,8 @@ pub enum Row {
     TapToMove,
     LeftHanded,
     LargeCards,
+    CardCount,
+    Separated,
     Restart,
     ResetStats,
 }
@@ -74,7 +76,7 @@ enum Control {
 }
 
 impl Row {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 11] = [
         Self::Draw,
         Self::Theme,
         Self::FourColor,
@@ -82,6 +84,8 @@ impl Row {
         Self::TapToMove,
         Self::LeftHanded,
         Self::LargeCards,
+        Self::CardCount,
+        Self::Separated,
         Self::Restart,
         Self::ResetStats,
     ];
@@ -96,6 +100,8 @@ impl Row {
             Self::TapToMove => "Tap to move",
             Self::LeftHanded => "Left-handed layout",
             Self::LargeCards => "Large cards",
+            Self::CardCount => "Show card count",
+            Self::Separated => "Separated cards",
             Self::Restart => "Current deal",
             Self::ResetStats => "Statistics",
         }
@@ -106,9 +112,12 @@ impl Row {
             Self::Draw => Control::Choice(&["1 card", "3 cards"]),
             Self::Theme => Control::Choice(&THEME_NAMES),
             Self::Animation => Control::Choice(&["Off", "Fast", "Normal"]),
-            Self::FourColor | Self::TapToMove | Self::LeftHanded | Self::LargeCards => {
-                Control::Toggle
-            }
+            Self::FourColor
+            | Self::TapToMove
+            | Self::LeftHanded
+            | Self::LargeCards
+            | Self::CardCount
+            | Self::Separated => Control::Toggle,
             Self::Restart => Control::Action("Restart"),
             Self::ResetStats => Control::Action("Reset"),
         }
@@ -544,6 +553,8 @@ pub fn selected(s: &Settings, row: Row) -> Option<usize> {
         Row::TapToMove => usize::from(s.tap_to_move),
         Row::LeftHanded => usize::from(s.left_handed),
         Row::LargeCards => usize::from(s.large_cards),
+        Row::CardCount => usize::from(s.card_count),
+        Row::Separated => usize::from(s.separated),
         Row::Restart | Row::ResetStats => return None,
     })
 }
@@ -573,6 +584,8 @@ pub fn apply(s: &mut Settings, hit: MenuHit) -> bool {
         MenuHit::Toggle(Row::TapToMove) => s.tap_to_move = !s.tap_to_move,
         MenuHit::Toggle(Row::LeftHanded) => s.left_handed = !s.left_handed,
         MenuHit::Toggle(Row::LargeCards) => s.large_cards = !s.large_cards,
+        MenuHit::Toggle(Row::CardCount) => s.card_count = !s.card_count,
+        MenuHit::Toggle(Row::Separated) => s.separated = !s.separated,
         // Actions, tabs and Done are handled by the app, not settings.
         MenuHit::Action(_)
         | MenuHit::Tab(_)

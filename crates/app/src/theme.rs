@@ -104,6 +104,8 @@ pub struct Palette {
     pub disabled: Color,
     /// Text and numbers on an accent fill.
     pub on: Color,
+    /// Under cards with "Separated cards" on.
+    pub shadow: Color,
 }
 
 macro_rules! each_colour {
@@ -119,7 +121,7 @@ impl Palette {
         let t = t.clamp(0.0, 1.0);
         let m = |x: Color, y: Color| mix(x, y, t);
         each_colour!(a, b, m; bg, accent, face, slot, text, ink, red, blue, green, muted, line, track,
-            disabled, on)
+            disabled, on, shadow)
     }
 }
 
@@ -183,6 +185,7 @@ fn derive(bg: Color, accent: Color, text_ratio: f32) -> Palette {
         track: readable(mix(text, bg, 0.5), bg, 3.0),
         disabled: mix(text, bg, 0.65),
         on,
+        shadow: faded(BLACK, if dark { 0.4 } else { 0.18 }),
     }
 }
 

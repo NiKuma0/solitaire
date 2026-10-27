@@ -8,7 +8,7 @@ pub mod suit;
 mod text;
 pub mod widgets;
 
-use macroquad::math::{Vec2, vec2};
+use macroquad::math::{Rect, Vec2, vec2};
 use macroquad::shapes::draw_rectangle;
 use macroquad::window::clear_background;
 use solitaire_core::PileId;
@@ -17,21 +17,24 @@ use crate::app::App;
 use crate::feedback::Target;
 use crate::fonts::Fonts;
 use crate::layout::{Button, Layout};
-use crate::scene::placements;
+use crate::scene::{Placement, placements};
+use crate::settings::Settings;
 use crate::table::Table;
 use crate::theme::{Palette, faded};
-use card::{draw_back, draw_face, draw_slot};
-use icon::{Icon, icon_shapes};
-use shapes::{fill_rounded, fill_shapes, stroke_circle};
+use card::{draw_back, draw_count, draw_face, draw_plate, draw_slot};
+use icon::Icon;
+use shapes::stroke_circle;
 use text::{Align, draw_label};
-use widgets::draw_icon_button;
+use widgets::{SELECTED, draw_icon_button, draw_pill};
 
 /// What every drawing helper needs.
 pub struct Ctx<'a> {
     pub palette: Palette,
     pub fonts: &'a Fonts,
-    pub four_color: bool,
+    /// Display options: four-colour suits, card counts, shadows.
+    pub settings: Settings,
     pub large: bool,
+    pub card_width: f32,
 }
 
 pub fn draw(app: &App, fonts: &Fonts, now: f64) {
@@ -41,8 +44,9 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
     let ctx = Ctx {
         palette: app.palette(now),
         fonts,
-        four_color: settings.four_color,
+        settings: *settings,
         large: l.large_cards,
+        card_width: l.card.x,
     };
     prewarm_text(fonts, l);
     clear_background(ctx.palette.bg);
@@ -52,7 +56,18 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
     let board = game.board();
     let anim = app.animator();
     let scene = placements(l, game, table.drag());
+    let at_rest = |p: &Placement| {
+        let shown = anim.shown(p, now);
+        shown.rect == p.rect && shown.scale_x >= 1.0 && shown.face_up == p.face_up
+    };
+    let in_plate = |p: &Placement| {
+        !p.face_up && !p.dragged && board.tableau.iter().any(|c| c.cards().contains(&p.card))
+    };
+    draw_plates(table, &scene, &|p| at_rest(p) && in_plate(p), &ctx);
     for p in anim.draw_order(&scene, now) {
+        if in_plate(&p) && at_rest(&p) {
+            continue;
+        }
         let mut shown = anim.shown(&p, now);
         // Foundation tops ride the win wave.
         if let Some(i) = board
@@ -66,10 +81,13 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
             draw_face(p.card, shown.rect, shown.scale_x, &ctx);
         } else {
             draw_back(shown.rect, shown.scale_x, &ctx);
+            if ctx.settings.card_count && board.stock.last() == Some(&p.card) && at_rest(&p) {
+                draw_count(shown.rect, board.stock.len(), &ctx);
+            }
         }
     }
 
-    draw_toolbar(app, now, &ctx);
+    draw_bars(app, now, &ctx);
     if game.is_won() && !anim.is_animating(now) {
         draw_win(l, board.score, &ctx);
     }
@@ -83,6 +101,8 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
 fn prewarm_text(fonts: &Fonts, l: &Layout) {
     let mut sizes: Vec<u16> = [
         card::rank_size(l.card.x, l.large_cards),
+        card::count_size(l.card.x),
+        12.0,
         14.0,
         15.0,
         16.0,
@@ -93,6 +113,7 @@ fn prewarm_text(fonts: &Fonts, l: &Layout) {
     .into_iter()
     .map(|s| text::raster_size(s).0)
     .collect();
+    sizes.sort_unstable();
     sizes.dedup();
     fonts.prewarm(&sizes);
 }
@@ -118,48 +139,69 @@ fn draw_slots(table: &Table, ctx: &Ctx) {
     }
 }
 
-fn draw_toolbar(app: &App, now: f64, ctx: &Ctx) {
-    let table = app.table();
-    let save_failed = app.save_failed();
+/// One accent plate per column for its face-down cards that are not moving.
+fn draw_plates(
+    table: &Table,
+    scene: &[Placement],
+    resting: &dyn Fn(&Placement) -> bool,
+    ctx: &Ctx,
+) {
     let l = table.layout();
+    for (col, &base) in table.game().board().tableau.iter().zip(&l.columns) {
+        let count = col.cards()[..col.face_down_count()]
+            .iter()
+            .filter(|&&card| scene.iter().any(|p| p.card == card && resting(p)))
+            .count();
+        if count > 0 {
+            let h = l.stack(col).plate(count);
+            draw_plate(Rect::new(base.x, base.y, base.w, h), count, ctx);
+        }
+    }
+}
 
+/// Header with the menu and score; new game, undo and redo at the bottom.
+fn draw_bars(app: &App, now: f64, ctx: &Ctx) {
+    let table = app.table();
+    let l = table.layout();
     let p = &ctx.palette;
-
     let board = table.game().board();
-    let size = 15.0;
     let font = ctx.fonts.regular.as_ref();
-    let line = |k: f32| vec2(l.status.x, l.status.center().y + k * size * 0.75);
+    let center = l.status.center();
     draw_label(
         &format!("Score {}", board.score),
-        line(-1.0),
-        size,
+        vec2(center.x, center.y - 8.0),
+        16.0,
         p.text,
-        Align::Left,
+        Align::Center,
         font,
     );
-    let (second, color) = if save_failed {
+    let (second, color) = if app.save_failed() {
         ("Not saved".to_owned(), p.text)
     } else if table.is_stuck() {
         ("No moves left".to_owned(), p.text)
     } else {
-        (format!("Moves {}", board.moves), p.muted)
+        (format!("{} moves", board.moves), p.muted)
     };
-    draw_label(&second, line(1.0), size, color, Align::Left, font);
+    draw_label(
+        &second,
+        vec2(center.x, center.y + 11.0),
+        12.0,
+        color,
+        Align::Center,
+        font,
+    );
 
     for &(button, rect) in &l.buttons {
         let enabled = table.is_enabled(button);
-        // Auto-complete only appears when it can be used.
-        if button == Button::AutoComplete && !enabled {
-            continue;
-        }
-        let icon = Icon::of(button);
+        let level = app.feedback(Target::Button(button), now);
         if button == Button::AutoComplete {
-            fill_rounded(rect, rect.h / 2.0, p.accent);
-            fill_shapes(&icon_shapes(icon, rect.center(), 22.0), p.on);
+            // Only shown when it can be used.
+            if enabled {
+                draw_pill(rect, "Finish", SELECTED.max(level), ctx);
+            }
         } else {
-            let level = app.feedback(Target::Button(button), now);
             let color = if enabled { p.text } else { p.disabled };
-            draw_icon_button(rect.center(), icon, color, level, ctx);
+            draw_icon_button(rect.center(), Icon::of(button), color, level, ctx);
         }
     }
 }
@@ -180,6 +222,5 @@ fn draw_win(l: &Layout, score: u32, ctx: &Ctx) {
         Align::Center,
         regular,
     );
-    fill_rounded(b, 12.0, p.accent);
-    draw_label("New game", b.center(), 18.0, p.on, Align::Center, bold);
+    draw_pill(b, "New game", SELECTED, ctx);
 }

@@ -222,3 +222,15 @@ fn theme_options_name_every_theme_in_order() {
     let names: Vec<&str> = ThemeId::ALL.iter().map(|t| t.name()).collect();
     assert_eq!(Row::Theme.options(), names.as_slice());
 }
+
+#[test]
+fn card_count_and_separated_cards_are_toggles() {
+    let mut s = Settings::default();
+    assert!(Row::CardCount.is_toggle() && Row::Separated.is_toggle());
+    assert!(apply(&mut s, MenuHit::Toggle(Row::CardCount)));
+    assert!(!s.card_count);
+    assert!(apply(&mut s, MenuHit::Toggle(Row::Separated)));
+    assert!(s.separated);
+    assert_eq!(selected(&s, Row::CardCount), Some(0));
+    assert_eq!(selected(&s, Row::Separated), Some(1));
+}

@@ -202,3 +202,11 @@ fn contrast_matches_wcag_reference_values() {
     // #767676 on white is the classic 4.54:1.
     assert!((contrast(Color::from_rgba(0x76, 0x76, 0x76, 255), WHITE) - 4.54).abs() < 0.02);
 }
+
+#[test]
+fn shadows_are_faint() {
+    for theme in ThemeId::ALL {
+        let a = palette(theme).shadow.a;
+        assert!(a > 0.0 && a <= 0.4, "{theme:?}: {a}");
+    }
+}
