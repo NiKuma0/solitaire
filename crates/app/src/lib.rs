@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod anim;
 pub mod config;
 pub mod fonts;
 pub mod gesture;
