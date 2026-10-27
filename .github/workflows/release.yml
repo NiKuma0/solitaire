@@ -1,0 +1,158 @@
+name: Release
+
+# A `v*` tag builds every platform and publishes a GitHub release.
+# Running it by hand builds the same files as workflow artifacts only.
+on:
+  push:
+    tags: ["v*"]
+    # TEMPORARY while debugging M5; removed before merging into main.
+    branches: [m5-release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  QUAD_APK_REV: d411c8fe1c08339e46d7dc6b40ac04ea5e3a01b6
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+          - name: windows-x86_64
+            os: windows-latest
+          - name: macos-universal
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+      - name: Version
+        run: echo "VERSION=$(cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="solitaire-app"))')" >> "$GITHUB_ENV"
+
+      - name: Build (Linux)
+        if: matrix.name == 'linux-x86_64'
+        run: |
+          cargo build -p solitaire-app --release --locked
+          mkdir -p "pkg/solitaire-$VERSION"
+          cp target/release/solitaire "pkg/solitaire-$VERSION/"
+          cp LICENSE-MIT LICENSE-APACHE README.md assets/fonts/OFL.txt "pkg/solitaire-$VERSION/"
+          tar -C pkg -czf "solitaire-$VERSION-${{ matrix.name }}.tar.gz" "solitaire-$VERSION"
+
+      - name: Build (Windows)
+        if: matrix.name == 'windows-x86_64'
+        run: |
+          cargo build -p solitaire-app --release --locked
+          mkdir -p "pkg/solitaire-$VERSION"
+          cp target/release/solitaire.exe "pkg/solitaire-$VERSION/"
+          cp LICENSE-MIT LICENSE-APACHE README.md assets/fonts/OFL.txt "pkg/solitaire-$VERSION/"
+          (cd pkg && 7z a "../solitaire-$VERSION-${{ matrix.name }}.zip" "solitaire-$VERSION")
+
+      - name: Build (macOS universal .app)
+        if: matrix.name == 'macos-universal'
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          cargo build -p solitaire-app --release --locked --target aarch64-apple-darwin
+          cargo build -p solitaire-app --release --locked --target x86_64-apple-darwin
+          app=pkg/Solitaire.app/Contents
+          mkdir -p "$app/MacOS" "$app/Resources"
+          lipo -create -output "$app/MacOS/solitaire" \
+            target/aarch64-apple-darwin/release/solitaire target/x86_64-apple-darwin/release/solitaire
+          sed "s/@VERSION@/$VERSION/g" packaging/macos/Info.plist > "$app/Info.plist"
+          cargo run -p solitaire-app --release --locked --example export_icons -- iconset AppIcon.iconset
+          iconutil -c icns AppIcon.iconset -o "$app/Resources/AppIcon.icns"
+          cp LICENSE-MIT LICENSE-APACHE assets/fonts/OFL.txt "$app/Resources/"
+          ditto -c -k --keepParent pkg/Solitaire.app "solitaire-$VERSION-${{ matrix.name }}.zip"
+
+      - name: Size
+        run: ls -l solitaire-* | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.name }}
+          path: solitaire-*.*
+          if-no-files-found: error
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install toolchain from rust-toolchain.toml
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add armv7-linux-androideabi aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+      - name: Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - name: Install cargo-quad-apk
+        run: cargo install cargo-quad-apk --git https://github.com/not-fl3/cargo-quad-apk --rev "$QUAD_APK_REV" --locked
+      - name: Version
+        run: echo "VERSION=$(cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="solitaire-app"))')" >> "$GITHUB_ENV"
+      - name: Launcher icons
+        run: cargo run -p solitaire-app --release --locked --example export_icons -- android crates/app/android-res
+      - name: Build APK
+        working-directory: crates/app
+        run: cargo quad-apk build --release --nosign -F unsafe-code
+      - name: Sign APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          ks="$RUNNER_TEMP/release.p12"
+          echo "$KEYSTORE_B64" | base64 -d > "$ks"
+          "$tools/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" \
+            --out "solitaire-$VERSION-android.apk" target/android-artifacts/release/apk/solitaire.apk
+          rm -f "$ks"
+          "$tools/apksigner" verify --print-certs "solitaire-$VERSION-android.apk" | grep -i "SHA-256"
+      - name: Size
+        run: ls -l solitaire-*.apk | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: solitaire-*.apk
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [desktop, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+      - name: Release notes
+        run: git-cliff --latest --strip header > notes.md
+      - uses: softprops/action-gh-release@v3
+        with:
+          body_path: notes.md
+          files: dist/*

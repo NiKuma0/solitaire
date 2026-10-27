@@ -1,5 +1,8 @@
 //! Solitaire app entry point: input plumbing and the main loop.
 
+// Release builds on Windows open no console window next to the game.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use macroquad::input::{
     KeyCode, MouseButton, is_key_down, is_key_pressed, is_mouse_button_down,
     is_mouse_button_pressed, is_mouse_button_released, mouse_position,
@@ -7,11 +10,11 @@ use macroquad::input::{
 use macroquad::math::{Vec2, vec2};
 use macroquad::time::get_time;
 use macroquad::window::{next_frame, screen_height, screen_width};
-use solitaire_app::app::{App, Startup};
+use solitaire_app::app::{App, Shortcut, Startup};
 use solitaire_app::config::window_conf;
 use solitaire_app::fonts::Fonts;
 use solitaire_app::gesture::Recognizer;
-use solitaire_app::layout::{Button, Insets};
+use solitaire_app::layout::Insets;
 use solitaire_app::render;
 use solitaire_app::storage::platform_storage;
 
@@ -72,7 +75,20 @@ fn handle_keys(app: &mut App) {
     .into_iter()
     .any(is_key_down);
     let shift = is_key_down(KeyCode::LeftShift) || is_key_down(KeyCode::RightShift);
-    if ctrl && is_key_pressed(KeyCode::Z) {
-        app.press(if shift { Button::Redo } else { Button::Undo });
+    let shortcut = if ctrl && is_key_pressed(KeyCode::Z) {
+        Some(if shift {
+            Shortcut::Redo
+        } else {
+            Shortcut::Undo
+        })
+    } else if !ctrl && is_key_pressed(KeyCode::N) {
+        Some(Shortcut::NewGame)
+    } else if is_key_pressed(KeyCode::Space) {
+        Some(Shortcut::Draw)
+    } else {
+        None
+    };
+    if let Some(s) = shortcut {
+        app.shortcut(s);
     }
 }

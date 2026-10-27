@@ -70,6 +70,18 @@ pub struct App {
     clock: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shortcut {
+    /// Ctrl+Z
+    Undo,
+    /// Ctrl+Shift+Z
+    Redo,
+    /// N
+    NewGame,
+    /// Space: draw from the stock or turn the waste over.
+    Draw,
+}
+
 /// What the app needs from the platform to start.
 #[derive(Debug, Clone, Copy)]
 pub struct Startup {
@@ -234,9 +246,16 @@ impl App {
     }
 
     /// Keyboard shortcuts and other direct button presses.
-    pub fn press(&mut self, button: Button) {
-        if self.menu.is_none() {
-            self.table.press(button);
+    /// A keyboard shortcut (SPEC §8). Ignored while the menu is open.
+    pub fn shortcut(&mut self, shortcut: Shortcut) {
+        if self.menu.is_some() {
+            return;
+        }
+        match shortcut {
+            Shortcut::Undo => self.table.press(Button::Undo),
+            Shortcut::Redo => self.table.press(Button::Redo),
+            Shortcut::NewGame => self.table.press(Button::New),
+            Shortcut::Draw => self.table.draw_from_stock(),
         }
     }
 

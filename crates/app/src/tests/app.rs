@@ -400,3 +400,37 @@ fn reset_statistics_needs_a_second_tap_soon_after() {
         0
     );
 }
+
+#[test]
+fn keyboard_shortcuts_play_the_game() {
+    let mut a = app(1280.0, 720.0, Settings::default());
+    let fresh = a.table().game().board().clone();
+    a.shortcut(Shortcut::Draw);
+    assert_eq!(a.table().game().board().waste.len(), 1, "Space draws");
+    a.shortcut(Shortcut::Undo);
+    assert_eq!(a.table().game().board(), &fresh);
+    a.shortcut(Shortcut::Redo);
+    assert_eq!(a.table().game().board().waste.len(), 1);
+    let seed = a.table().game().seed();
+    a.shortcut(Shortcut::NewGame);
+    assert_ne!(a.table().game().seed(), seed, "N deals a new game");
+}
+
+#[test]
+fn space_recycles_an_empty_stock() {
+    let mut a = app(1280.0, 720.0, Settings::default());
+    for _ in 0..24 {
+        a.shortcut(Shortcut::Draw);
+    }
+    assert_eq!(a.table().game().board().stock.len(), 0);
+    a.shortcut(Shortcut::Draw);
+    assert_eq!(a.table().game().board().stock.len(), 24);
+}
+
+#[test]
+fn shortcuts_wait_while_the_menu_is_open() {
+    let mut a = app(1280.0, 720.0, Settings::default());
+    open_menu(&mut a, 1.0);
+    a.shortcut(Shortcut::Draw);
+    assert_eq!(a.table().game().board().waste.len(), 0);
+}

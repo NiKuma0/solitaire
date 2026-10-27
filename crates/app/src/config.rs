@@ -10,6 +10,8 @@ pub fn window_conf() -> Conf {
         window_height: 720,
         high_dpi: true,
         window_resizable: true,
+        // Our own icon instead of miniquad's logo.
+        icon: crate::app_icon::window_icon(),
         ..Default::default()
     }
 }

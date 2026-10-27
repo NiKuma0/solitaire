@@ -192,6 +192,16 @@ impl Table {
         self.changed();
     }
 
+    /// Turns cards from the stock, or the waste back over when the stock is empty.
+    pub fn draw_from_stock(&mut self) {
+        if self.game.is_won() {
+            return;
+        }
+        if self.game.apply(stock_move(self.game.board())).is_ok() {
+            self.changed();
+        }
+    }
+
     /// Deals the current game's cards again from the start.
     pub fn restart(&mut self) {
         self.abandon();
@@ -225,8 +235,7 @@ impl Table {
         }
         let board = self.game.board();
         let mv = match spot_at(&self.layout, board, self.game.draw_mode(), p) {
-            Some(Spot::Stock) if board.stock.is_empty() => Some(Move::Recycle),
-            Some(Spot::Stock) => Some(Move::Draw),
+            Some(Spot::Stock) => Some(stock_move(board)),
             Some(Spot::Card { pile, index }) => {
                 let Some(card) = self.face_up_card(pile, index) else {
                     return;
@@ -386,6 +395,14 @@ impl Table {
             }
             PileId::Stock => None,
         }
+    }
+}
+
+const fn stock_move(board: &solitaire_core::Board) -> Move {
+    if board.stock.is_empty() {
+        Move::Recycle
+    } else {
+        Move::Draw
     }
 }
 

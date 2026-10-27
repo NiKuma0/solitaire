@@ -4,3 +4,4 @@
 *.snap.new
 /PROMPT.md
 /.playwright-mcp
+/crates/app/android-res
