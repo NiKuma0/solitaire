@@ -21,6 +21,7 @@ pub mod render;
 pub mod reveal;
 pub mod scene;
 pub mod settings;
+pub mod settings_screen;
 pub mod stats;
 pub mod storage;
 pub mod table;

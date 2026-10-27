@@ -33,14 +33,7 @@ pub fn draw(
     fill_rounded(m.panel, 16.0, p.bg);
     stroke_rounded(m.panel, 16.0, 1.0, p.line);
 
-    for (tab, r) in m.tabs {
-        let level = if tab == view.tab {
-            SELECTED
-        } else {
-            lit(MenuHit::Tab(tab))
-        };
-        draw_pill(r, tab.label(), level, ctx);
-    }
+    // Only statistics are left in the panel; its tabs are gone.
     draw_pill(m.done, "Done", lit(MenuHit::Done), ctx);
 
     // Content scrolls under the title bar: clip it to the viewport.

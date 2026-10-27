@@ -13,17 +13,22 @@ use solitaire_core::DrawMode;
 
 const TITLE_SIZE: f32 = 24.0;
 
-pub fn draw(app: &App, picker: f32, now: f64, ctx: &Ctx) {
-    let p = &ctx.palette;
+/// The back arrow in the menu icon's place, unless the picker covers it.
+pub fn draw_back_arrow(app: &App, picker: f32, now: f64, ctx: &Ctx) {
     let l = app.table().layout();
-    let lit = |hit| app.feedback(Target::Main(hit), now);
-    // The back arrow takes the menu icon's place, unless the picker covers it.
     if picker <= 0.0
         && let Some(&(_, r)) = l.buttons.iter().find(|(b, _)| *b == Button::Settings)
     {
         let level = app.feedback(Target::Button(Button::Settings), now);
-        draw_icon_button(r.center(), Icon::Back, p.text, level, ctx);
+        draw_icon_button(r.center(), Icon::Back, ctx.palette.text, level, ctx);
     }
+}
+
+pub fn draw(app: &App, picker: f32, now: f64, ctx: &Ctx) {
+    let p = &ctx.palette;
+    let l = app.table().layout();
+    let lit = |hit| app.feedback(Target::Main(hit), now);
+    draw_back_arrow(app, picker, now, ctx);
 
     let m = MainMenu::new(l);
     let font = ctx.fonts.regular.as_ref();

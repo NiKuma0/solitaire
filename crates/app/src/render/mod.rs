@@ -4,6 +4,7 @@ mod card;
 pub mod icon;
 mod main_menu;
 mod menu;
+mod settings_screen;
 mod shapes;
 pub mod suit;
 mod text;
@@ -65,6 +66,7 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
     match screen {
         Screen::Game => draw_game(app, picker, now, &ctx),
         Screen::Menu => main_menu::draw(app, picker, now, &ctx),
+        Screen::Settings => settings_screen::draw(app, picker, now, &ctx),
     }
     draw_theme_button(app, picker, now, &full);
     if let Some(view) = app.menu() {
@@ -128,6 +130,7 @@ fn prewarm_text(fonts: &Fonts, l: &Layout) {
         card::rank_size(l.card.x, l.large_cards),
         card::count_size(l.card.x),
         12.0,
+        13.0,
         14.0,
         15.0,
         16.0,

@@ -5,6 +5,7 @@ use crate::dialog::DialogHit;
 use crate::layout::Button;
 use crate::main_menu::MainHit;
 use crate::menu::MenuHit;
+use crate::settings_screen::SettingsHit;
 
 /// How long a press flash takes to fade out.
 pub const PRESS_SECONDS: f32 = 0.3;
@@ -16,6 +17,7 @@ pub enum Target {
     Menu(MenuHit),
     Dialog(DialogHit),
     Main(MainHit),
+    Settings(SettingsHit),
 }
 
 /// The last press; one flash at a time.

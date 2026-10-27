@@ -10,12 +10,13 @@ use crate::feedback::{Feedback, Target};
 use crate::gesture::Gesture;
 use crate::layout::{Button, Insets};
 use crate::main_menu::{Item, MainHit, MainMenu};
-use crate::menu::{Menu, MenuHit, Row, Tab, apply};
+use crate::menu::{Menu, MenuHit, Row, Tab, apply, selected};
 use crate::persist;
 use crate::picker::{Picker, PickerHit, PickerLayout};
 use crate::reveal::Reveal;
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
+use crate::settings_screen::{SettingsHit, SettingsScreen};
 use crate::stats::{GameRecord, Stats};
 use crate::storage::{MemoryStorage, Storage};
 use crate::table::{Event, Table};
@@ -77,6 +78,11 @@ pub struct App {
     transition: Option<Transition<Screen>>,
     /// Draw mode changed on this visit to the menu screen.
     draw_changed: bool,
+    settings_scroll: f32,
+    /// Pointer y and scroll when a drag on the settings screen began.
+    settings_drag: Option<(f32, f32)>,
+    /// A first tap on "Reset" asks; a second one before this time resets.
+    confirm_reset_until: Option<f64>,
     clock: f64,
     feedback: Feedback,
     picker: Option<Picker>,
@@ -89,6 +95,15 @@ pub struct App {
 pub enum Screen {
     Game,
     Menu,
+    Settings,
+}
+
+/// The settings screen's state, for drawing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SettingsView {
+    pub scroll: f32,
+    /// "Reset" was tapped once and waits for a second tap.
+    pub confirm_reset: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,6 +211,9 @@ impl App {
             view: Screen::Game,
             transition: None,
             draw_changed: false,
+            settings_scroll: 0.0,
+            settings_drag: None,
+            confirm_reset_until: None,
             clock: now,
             feedback: Feedback::default(),
             picker: None,
@@ -289,6 +307,8 @@ impl App {
             self.handle_dialog(gesture, now);
         } else if self.view == Screen::Menu {
             self.handle_main_menu(gesture, now);
+        } else if self.view == Screen::Settings {
+            self.handle_settings(gesture, now);
         } else if let Gesture::Tap(p) = gesture
             && self.button_at(p) == Some(Button::New)
         {
@@ -384,6 +404,10 @@ impl App {
         if self.transition.is_some_and(|t| t.is_done(now)) {
             self.transition = None;
         }
+        if self.view == Screen::Settings {
+            let max = SettingsScreen::new(self.table.layout()).max_scroll();
+            self.settings_scroll = self.settings_scroll.min(max);
+        }
 
         let won = self.table.game().is_won();
         if won && !self.won {
@@ -412,10 +436,6 @@ impl App {
                 Some(MenuHit::Done) => {
                     self.menu = None;
                 }
-                Some(MenuHit::Tab(tab)) => {
-                    m.tab = tab;
-                    m.scroll = 0.0;
-                }
                 Some(MenuHit::Action(Row::Restart)) => {
                     self.menu = None;
                     self.table.restart();
@@ -431,6 +451,7 @@ impl App {
                         m.confirm_reset_until = Some(now + CONFIRM_SECONDS);
                     }
                 }
+                // Tabs included: settings ignore them, and the panel only shows statistics now.
                 Some(hit) => self.change_setting(hit, now),
                 None => {}
             },
@@ -473,17 +494,8 @@ impl App {
         let Gesture::Tap(p) = gesture else {
             return;
         };
-        match self.button_at(p) {
-            Some(Button::Settings) => {
-                self.feedback.press(Target::Button(Button::Settings), now);
-                self.back_to_game(now);
-                return;
-            }
-            Some(Button::Theme) => {
-                self.picker = Some(Picker::open(now, self.settings.animation));
-                return;
-            }
-            _ => {}
+        if self.header_tap(p, now) {
+            return;
         }
         let Some(hit) = MainMenu::new(self.table.layout()).hit(p) else {
             return;
@@ -503,26 +515,121 @@ impl App {
                     self.change_setting(MenuHit::Toggle(Row::LeftHanded), now);
                 }
             }
-            MainHit::Item(item) => self.open_panel(item),
+            MainHit::Item(item) => self.open_item(item, now),
         }
     }
 
-    /// The settings panel, on the part `item` stands for.
-    fn open_panel(&mut self, item: Item) {
-        let menu = Menu::new(self.screen, self.insets);
-        let (tab, scroll) = match item {
-            Item::Settings => (Tab::Settings, 0.0),
-            Item::Stats => (Tab::Stats, 0.0),
-            Item::About => (Tab::Settings, menu.max_scroll(Tab::Settings)),
+    /// The back arrow and the palette, on screens other than the game.
+    /// True if `p` was one of them.
+    fn header_tap(&mut self, p: Vec2, now: f64) -> bool {
+        match self.button_at(p) {
+            Some(Button::Settings) => {
+                self.feedback.press(Target::Button(Button::Settings), now);
+                match self.view {
+                    Screen::Settings => self.go(Screen::Menu, now),
+                    Screen::Menu | Screen::Game => self.back_to_game(now),
+                }
+                true
+            }
+            Some(Button::Theme) => {
+                self.picker = Some(Picker::open(now, self.settings.animation));
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Where a menu item leads: the settings screen (About is at its end) or the statistics.
+    fn open_item(&mut self, item: Item, now: f64) {
+        match item {
+            Item::Settings | Item::About => {
+                self.settings_scroll = if item == Item::About {
+                    SettingsScreen::new(self.table.layout()).max_scroll()
+                } else {
+                    0.0
+                };
+                self.confirm_reset_until = None;
+                self.go(Screen::Settings, now);
+            }
+            Item::Stats => {
+                self.menu = Some(MenuState {
+                    menu: Menu::new(self.screen, self.insets),
+                    screen: self.screen,
+                    tab: Tab::Stats,
+                    scroll: 0.0,
+                    drag_anchor: None,
+                    confirm_reset_until: None,
+                });
+            }
+        }
+    }
+
+    /// The settings screen's state, for drawing.
+    #[must_use]
+    pub fn settings_view(&self) -> SettingsView {
+        SettingsView {
+            scroll: self.settings_scroll,
+            confirm_reset: self.confirm_reset_until.is_some_and(|t| self.clock < t),
+        }
+    }
+
+    /// Controls change settings; drags scroll; Restart and Reset act.
+    fn handle_settings(&mut self, gesture: Gesture, now: f64) {
+        self.clock = now;
+        let screen = SettingsScreen::new(self.table.layout());
+        let scroll_to = |app: &mut Self, y: f32| {
+            if let Some((start_y, start_scroll)) = app.settings_drag {
+                app.settings_scroll = (start_scroll + start_y - y).clamp(0.0, screen.max_scroll());
+            }
         };
-        self.menu = Some(MenuState {
-            menu,
-            screen: self.screen,
-            tab,
-            scroll,
-            drag_anchor: None,
-            confirm_reset_until: None,
-        });
+        let p = match gesture {
+            Gesture::Tap(p) => p,
+            Gesture::DragStart { origin, at } => {
+                self.settings_drag = Some((origin.y, self.settings_scroll));
+                scroll_to(self, at.y);
+                return;
+            }
+            Gesture::DragMove(p) => {
+                scroll_to(self, p.y);
+                return;
+            }
+            Gesture::Drop(p) => {
+                scroll_to(self, p.y);
+                self.settings_drag = None;
+                return;
+            }
+        };
+        if self.header_tap(p, now) {
+            return;
+        }
+        let Some(hit) = screen.hit(p, self.settings_scroll) else {
+            return;
+        };
+        self.feedback.press(Target::Settings(hit), now);
+        match hit {
+            SettingsHit::Toggle(row) => self.change_setting(MenuHit::Toggle(row), now),
+            SettingsHit::Step(row, s) => {
+                let current = selected(&self.settings, row).unwrap_or(0);
+                if let Some(i) = step(current, row.options().len(), s) {
+                    self.change_setting(MenuHit::Choose(row, i), now);
+                }
+            }
+            SettingsHit::Action(Row::Restart) => {
+                self.table.restart();
+                self.go(Screen::Game, now);
+            }
+            SettingsHit::Action(Row::ResetStats) => {
+                if self.confirm_reset_until.is_some_and(|t| now < t) {
+                    self.confirm_reset_until = None;
+                    self.stats.reset();
+                    let result = persist::save_stats(self.storage.as_mut(), &self.stats);
+                    self.save_failed = result.is_err();
+                } else {
+                    self.confirm_reset_until = Some(now + CONFIRM_SECONDS);
+                }
+            }
+            SettingsHit::Action(_) => {}
+        }
     }
 
     /// Back to the game; a new draw mode deals at once, or asks if the game is under way.

@@ -107,6 +107,28 @@ impl Row {
         }
     }
 
+    /// One or two sentences under the setting's name.
+    #[must_use]
+    pub const fn description(self) -> &'static str {
+        match self {
+            Self::Draw => "How many cards each tap on the stock turns over.",
+            Self::Theme => "Colours of the table, the cards and everything else.",
+            Self::FourColor => {
+                "Diamonds turn blue and clubs green, so every suit has its own colour."
+            }
+            Self::Animation => "How quickly cards move. Off makes every change instant.",
+            Self::TapToMove => {
+                "Tap a card to send it to the best place. When this is off, double-tap instead."
+            }
+            Self::LeftHanded => "Stock and waste on the left, foundations on the right.",
+            Self::LargeCards => "Bigger cards and numbers, with the columns closer together.",
+            Self::CardCount => "Numbers on the stock and on each column's face-down plate.",
+            Self::Separated => "A faint shadow around each card, so overlapping cards stand apart.",
+            Self::Restart => "Deal the current game again from the start.",
+            Self::ResetStats => "Forget every finished game. Tap again to confirm.",
+        }
+    }
+
     const fn control(self) -> Control {
         match self {
             Self::Draw => Control::Choice(&["1 card", "3 cards"]),
