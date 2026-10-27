@@ -26,10 +26,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,cargo-nextest,cargo-deny,cargo-shear
+          tool: just,cargo-nextest,cargo-deny,cargo-shear,cargo-llvm-cov
       - name: Install wasm-opt
         run: |
           curl -sSL "https://github.com/WebAssembly/binaryen/releases/download/${BINARYEN_VERSION}/binaryen-${BINARYEN_VERSION}-x86_64-linux.tar.gz" | tar xz -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/binaryen-${BINARYEN_VERSION}/bin" >> "$GITHUB_PATH"
       - run: just check
+      - run: just cov
       - run: just size
