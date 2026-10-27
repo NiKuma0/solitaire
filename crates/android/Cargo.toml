@@ -10,6 +10,18 @@ authors.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+# The APK's Java side loads `lib<last part of package_name>.so` and
+# cargo-quad-apk names the library after this binary, so it must be
+# `solitaire`. Only built with `--features apk`, so it does not collide with
+# the desktop binary of the same name in crates/app.
+[[bin]]
+name = "solitaire"
+path = "src/main.rs"
+required-features = ["apk"]
+
+[features]
+apk = []
+
 [dependencies]
 solitaire-app = { path = "../app" }
 macroquad.workspace = true
