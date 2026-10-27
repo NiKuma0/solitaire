@@ -44,7 +44,7 @@ web:
     cargo build -p solitaire-app --release --locked --target wasm32-unknown-unknown
     rm -rf {{ dist }} && mkdir -p {{ dist }}
     wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals {{ wasm }} -o {{ dist }}/solitaire.wasm
-    cp web/index.html web/boot.js {{ dist }}/
+    cp web/index.html web/boot.js web/storage.js {{ dist }}/
     cp "$(just _miniquad-dir)/js/gl.js" {{ dist }}/gl.js
     touch {{ dist }}/.nojekyll
 

@@ -13,6 +13,7 @@ pub mod menu;
 pub mod render;
 pub mod scene;
 pub mod settings;
+pub mod storage;
 pub mod table;
 pub mod theme;
 

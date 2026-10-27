@@ -62,7 +62,7 @@ fn csp_allows_only_own_scripts_and_wasm() {
 
 #[test]
 fn web_shell_references_no_external_urls() {
-    for name in ["index.html", "boot.js"] {
+    for name in ["index.html", "boot.js", "storage.js"] {
         let text = web_file(name);
         for scheme in ["http://", "https://", "//cdn", "ws://", "wss://"] {
             assert!(!text.contains(scheme), "{name} mentions `{scheme}`");

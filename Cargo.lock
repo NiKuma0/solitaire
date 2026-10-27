@@ -642,7 +642,9 @@ dependencies = [
  "serde",
  "serde_json",
  "solitaire-core",
+ "solitaire-web-bridge",
  "taffy",
+ "thiserror",
 ]
 
 [[package]]
@@ -656,6 +658,10 @@ dependencies = [
  "serde_json",
  "thiserror",
 ]
+
+[[package]]
+name = "solitaire-web-bridge"
+version = "0.1.0"
 
 [[package]]
 name = "syn"
