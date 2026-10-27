@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
+pub mod gesture;
 pub mod hit;
 pub mod layout;
 pub mod theme;
