@@ -20,6 +20,7 @@ fmt-check:
 clippy:
     cargo clippy --workspace --all-targets --locked -- -D warnings
     cargo clippy --workspace --target wasm32-unknown-unknown --locked -- -D warnings
+    cargo clippy -p solitaire-android --features apk --locked -- -D warnings
 
 test:
     cargo nextest run --workspace --locked --no-tests=pass

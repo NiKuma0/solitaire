@@ -110,7 +110,13 @@ jobs:
       - name: Build APK
         # A separate edition 2021 crate: cargo-quad-apk injects code that 2024 rejects.
         working-directory: crates/android
-        run: cargo quad-apk build --release --nosign
+        run: cargo quad-apk build --release --nosign --features apk
+      - name: Check the native library name
+        # Java loads lib<last part of the package name>.so; a mismatch crashes at launch.
+        run: |
+          apk=$(ls target/android-artifacts/release/apk/*.apk)
+          unzip -l "$apk" | tee /dev/stderr | grep -q 'lib/arm64-v8a/libsolitaire.so'
+          unzip -l "$apk" | grep -q 'lib/armeabi-v7a/libsolitaire.so'
       - name: Sign APK
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
