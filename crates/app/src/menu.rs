@@ -143,13 +143,14 @@ const TARGET: f32 = 44.0;
 const SWITCH_WIDTH: f32 = 56.0;
 const ACTION_WIDTH: f32 = 88.0;
 
-/// Rough width of `text` at `size`: Inter averages a bit over half an em per character.
+/// Generous width of `text` at `size`: Inter averages about 0.6 em per
+/// character, so this rather overestimates than lets text spill out.
 fn text_width(text: &str, size: f32) -> f32 {
-    text.chars().count() as f32 * size * 0.55
+    text.chars().count() as f32 * size * 0.62
 }
 
 fn option_width(text: &str) -> f32 {
-    (text_width(text, LABEL_SIZE) + 24.0).max(48.0)
+    (text_width(text, LABEL_SIZE) + 28.0).max(48.0)
 }
 
 impl Menu {

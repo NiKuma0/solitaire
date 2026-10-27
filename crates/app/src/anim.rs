@@ -53,7 +53,7 @@ impl Tween {
 }
 
 /// Deal and cascade spacing between cards, as a fraction of a move.
-const DEAL_STAGGER: f32 = 0.35;
+const DEAL_STAGGER: f32 = 0.15;
 const CASCADE_STAGGER: f32 = 0.5;
 /// Shake length and width, relative to a move and to the card width.
 const SHAKE_MOVES: f32 = 1.5;

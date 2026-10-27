@@ -12,7 +12,26 @@ pub struct Fonts {
     pub semibold: Option<Font>,
 }
 
+/// Every character the subset fonts contain.
+fn charset() -> Vec<char> {
+    (' '..='~')
+        .chain(['\u{a0}', '·', '×', '–', '—', '…'])
+        .collect()
+}
+
 impl Fonts {
+    /// Rasterizes `sizes` (glyph pixel sizes) up front. Growing the glyph
+    /// atlas mid-frame replaces its texture under draws already queued, so
+    /// this runs before anything is drawn.
+    pub fn prewarm(&self, sizes: &[u16]) {
+        let chars = charset();
+        for font in [&self.regular, &self.semibold].into_iter().flatten() {
+            for &size in sizes {
+                font.populate_font_cache(&chars, size);
+            }
+        }
+    }
+
     /// Needs a window: call after macroquad has started.
     #[must_use]
     pub fn load() -> Self {
