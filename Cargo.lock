@@ -627,7 +627,7 @@ checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "solitaire-android"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "macroquad",
  "solitaire-app",
@@ -635,7 +635,7 @@ dependencies = [
 
 [[package]]
 name = "solitaire-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "macroquad",
  "png",
@@ -648,7 +648,7 @@ dependencies = [
 
 [[package]]
 name = "solitaire-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "insta",
  "proptest",
@@ -660,7 +660,7 @@ dependencies = [
 
 [[package]]
 name = "solitaire-web-bridge"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "syn"
