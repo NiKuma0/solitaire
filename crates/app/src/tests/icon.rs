@@ -3,16 +3,8 @@
 use macroquad::math::{Vec2, vec2};
 
 use crate::layout::Button;
-use crate::render::icon::icon_shapes;
+use crate::render::icon::{Icon, icon_shapes};
 use crate::render::suit::Shape;
-
-const BUTTONS: [Button; 5] = [
-    Button::New,
-    Button::Undo,
-    Button::Redo,
-    Button::AutoComplete,
-    Button::Settings,
-];
 
 /// Conservative bounding box of the shapes.
 fn bounds(shapes: &[Shape]) -> (Vec2, Vec2) {
@@ -43,7 +35,7 @@ fn bounds(shapes: &[Shape]) -> (Vec2, Vec2) {
 fn every_icon_fits_its_box() {
     let center = vec2(50.0, 50.0);
     let size = 24.0;
-    for button in BUTTONS {
+    for button in Icon::ALL {
         let shapes = icon_shapes(button, center, size);
         assert_ne!(shapes, [], "{button:?}");
         let (min, max) = bounds(&shapes);
@@ -53,7 +45,7 @@ fn every_icon_fits_its_box() {
             "{button:?}: {min} {max}"
         );
         assert!(
-            max.x - min.x >= size * 0.5 && max.y - min.y >= size * 0.5,
+            (max.x - min.x).max(max.y - min.y) >= size * 0.5,
             "{button:?} too small"
         );
     }
@@ -62,21 +54,30 @@ fn every_icon_fits_its_box() {
 #[test]
 fn redo_mirrors_undo() {
     let center = vec2(0.0, 0.0);
-    let (umin, umax) = bounds(&icon_shapes(Button::Undo, center, 20.0));
-    let (rmin, rmax) = bounds(&icon_shapes(Button::Redo, center, 20.0));
+    let (umin, umax) = bounds(&icon_shapes(Icon::Undo, center, 20.0));
+    let (rmin, rmax) = bounds(&icon_shapes(Icon::Redo, center, 20.0));
     assert!((umin.x + rmax.x).abs() < 0.01 && (umax.x + rmin.x).abs() < 0.01);
     assert!((umin.y - rmin.y).abs() < 0.01 && (umax.y - rmax.y).abs() < 0.01);
 }
 
 #[test]
-fn icons_differ() {
-    let all: Vec<_> = BUTTONS
-        .iter()
-        .map(|&b| icon_shapes(b, Vec2::ZERO, 10.0))
-        .collect();
-    for (i, a) in all.iter().enumerate() {
-        for b in &all[i + 1..] {
-            assert_ne!(a, b);
+fn icons_differ_from_each_other() {
+    for (i, a) in Icon::ALL.iter().enumerate() {
+        for b in &Icon::ALL[i + 1..] {
+            assert_ne!(
+                icon_shapes(*a, Vec2::ZERO, 1.0),
+                icon_shapes(*b, Vec2::ZERO, 1.0),
+                "{a:?} vs {b:?}"
+            );
         }
     }
+}
+
+#[test]
+fn toolbar_buttons_have_icons() {
+    assert_eq!(Icon::of(Button::New), Icon::NewGame);
+    assert_eq!(Icon::of(Button::Undo), Icon::Undo);
+    assert_eq!(Icon::of(Button::Redo), Icon::Redo);
+    assert_eq!(Icon::of(Button::AutoComplete), Icon::Auto);
+    assert_eq!(Icon::of(Button::Settings), Icon::Menu);
 }

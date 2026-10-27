@@ -104,7 +104,7 @@ impl Row {
     const fn control(self) -> Control {
         match self {
             Self::Draw => Control::Choice(&["1 card", "3 cards"]),
-            Self::Theme => Control::Choice(&["Light", "Dark", "Black", "Warm", "High contrast"]),
+            Self::Theme => Control::Choice(&THEME_NAMES),
             Self::Animation => Control::Choice(&["Off", "Fast", "Normal"]),
             Self::FourColor | Self::TapToMove | Self::LeftHanded | Self::LargeCards => {
                 Control::Toggle
@@ -179,6 +179,17 @@ pub const ABOUT_LINES: [&str; 4] = [
     "github.com/NiKuma0/solitaire",
     "Font: Inter, SIL Open Font License 1.1",
 ];
+
+/// Theme names in picker order, so option `i` is `ThemeId::ALL[i]`.
+const THEME_NAMES: [&str; ThemeId::ALL.len()] = {
+    let mut names = [""; ThemeId::ALL.len()];
+    let mut i = 0;
+    while i < names.len() {
+        names[i] = ThemeId::ALL[i].name();
+        i += 1;
+    }
+    names
+};
 
 pub const LABEL_SIZE: f32 = 16.0;
 pub const ABOUT_LINE: f32 = 22.0;

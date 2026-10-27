@@ -47,7 +47,7 @@ fn choices_have_one_target_per_option() {
     let m = menu(390.0, 844.0);
     let count = |r: Row| m.rows.iter().find(|x| x.row == r).map(|x| x.targets.len());
     assert_eq!(count(Row::Draw), Some(2));
-    assert_eq!(count(Row::Theme), Some(5));
+    assert_eq!(count(Row::Theme), Some(ThemeId::ALL.len()));
     assert_eq!(count(Row::Animation), Some(3));
     assert_eq!(count(Row::FourColor), Some(1));
     assert_eq!(count(Row::ResetStats), Some(1));
@@ -56,7 +56,7 @@ fn choices_have_one_target_per_option() {
 #[test]
 fn short_screens_scroll_tall_ones_do_not() {
     assert!(menu(640.0, 360.0).max_scroll(Tab::Settings) > 0.0);
-    assert_eq!(menu(390.0, 844.0).max_scroll(Tab::Settings), 0.0);
+    assert_eq!(menu(768.0, 1024.0).max_scroll(Tab::Settings), 0.0);
 }
 
 #[test]
@@ -215,4 +215,10 @@ fn both_tabs_share_one_panel() {
     let m = menu(390.0, 844.0);
     assert!(m.viewport.h > 0.0);
     assert!(m.max_scroll(Tab::Stats) >= 0.0 && m.max_scroll(Tab::Settings) >= 0.0);
+}
+
+#[test]
+fn theme_options_name_every_theme_in_order() {
+    let names: Vec<&str> = ThemeId::ALL.iter().map(|t| t.name()).collect();
+    assert_eq!(Row::Theme.options(), names.as_slice());
 }

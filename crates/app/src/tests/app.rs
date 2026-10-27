@@ -4,6 +4,7 @@ use macroquad::math::{Vec2, vec2};
 use solitaire_core::{DrawMode, Game, PileId};
 
 use super::*;
+use crate::feedback::Target;
 use crate::gesture::{DRAG_THRESHOLD, Gesture};
 use crate::layout::{Button, Insets};
 use crate::menu::{MenuHit, Row};
@@ -433,4 +434,37 @@ fn shortcuts_wait_while_the_menu_is_open() {
     open_menu(&mut a, 1.0);
     a.shortcut(Shortcut::Draw);
     assert_eq!(a.table().game().board().waste.len(), 0);
+}
+
+#[test]
+fn tapping_a_toolbar_button_lights_it() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 1.0);
+    let undo = Target::Button(Button::Undo);
+    assert_eq!(a.feedback(undo, 1.0), 0.0);
+    let p = button(&a, Button::Undo);
+    tap(&mut a, p, 2.0);
+    assert_eq!(a.feedback(undo, 2.0), 1.0);
+}
+
+#[test]
+fn disabled_buttons_do_not_light() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let p = button(&a, Button::Redo);
+    tap(&mut a, p, 1.0);
+    assert_eq!(a.feedback(Target::Button(Button::Redo), 1.0), 0.0);
+}
+
+#[test]
+fn tapping_a_menu_control_lights_it() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let p = button(&a, Button::Settings);
+    tap(&mut a, p, 1.0);
+    let draw3 = row_target(&a, Row::Draw, 1);
+    tap(&mut a, draw3, 2.0);
+    assert_eq!(
+        a.feedback(Target::Menu(MenuHit::Choose(Row::Draw, 1)), 2.0),
+        1.0
+    );
 }

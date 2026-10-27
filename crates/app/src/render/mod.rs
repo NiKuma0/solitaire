@@ -6,6 +6,7 @@ mod menu;
 mod shapes;
 pub mod suit;
 mod text;
+pub mod widgets;
 
 use macroquad::math::{Vec2, vec2};
 use macroquad::shapes::draw_rectangle;
@@ -13,15 +14,17 @@ use macroquad::window::clear_background;
 use solitaire_core::PileId;
 
 use crate::app::App;
+use crate::feedback::Target;
 use crate::fonts::Fonts;
 use crate::layout::{Button, Layout};
 use crate::scene::placements;
 use crate::table::Table;
 use crate::theme::{Palette, faded};
 use card::{draw_back, draw_face, draw_slot};
-use icon::icon_shapes;
-use shapes::{fill_rounded, fill_shapes, stroke_circle, stroke_rounded};
+use icon::{Icon, icon_shapes};
+use shapes::{fill_rounded, fill_shapes, stroke_circle};
 use text::{Align, draw_label};
+use widgets::draw_icon_button;
 
 /// What every drawing helper needs.
 pub struct Ctx<'a> {
@@ -66,12 +69,13 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
         }
     }
 
-    draw_toolbar(table, app.save_failed(), &ctx);
+    draw_toolbar(app, now, &ctx);
     if game.is_won() && !anim.is_animating(now) {
         draw_win(l, board.score, &ctx);
     }
     if let Some(view) = app.menu() {
-        menu::draw(view, *settings, app.stats(), &ctx);
+        let lit = |hit| app.feedback(Target::Menu(hit), now);
+        menu::draw(view, *settings, app.stats(), &lit, &ctx);
     }
 }
 
@@ -114,7 +118,9 @@ fn draw_slots(table: &Table, ctx: &Ctx) {
     }
 }
 
-fn draw_toolbar(table: &Table, save_failed: bool, ctx: &Ctx) {
+fn draw_toolbar(app: &App, now: f64, ctx: &Ctx) {
+    let table = app.table();
+    let save_failed = app.save_failed();
     let l = table.layout();
 
     let p = &ctx.palette;
@@ -146,14 +152,15 @@ fn draw_toolbar(table: &Table, save_failed: bool, ctx: &Ctx) {
         if button == Button::AutoComplete && !enabled {
             continue;
         }
-        let fg = if button == Button::AutoComplete {
-            fill_rounded(rect, 10.0, p.accent);
-            p.on
+        let icon = Icon::of(button);
+        if button == Button::AutoComplete {
+            fill_rounded(rect, rect.h / 2.0, p.accent);
+            fill_shapes(&icon_shapes(icon, rect.center(), 22.0), p.on);
         } else {
-            stroke_rounded(rect, 10.0, 1.0, p.line);
-            if enabled { p.text } else { p.disabled }
-        };
-        fill_shapes(&icon_shapes(button, rect.center(), 22.0), fg);
+            let level = app.feedback(Target::Button(button), now);
+            let color = if enabled { p.text } else { p.disabled };
+            draw_icon_button(rect.center(), icon, color, level, ctx);
+        }
     }
 }
 

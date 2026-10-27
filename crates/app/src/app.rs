@@ -4,6 +4,7 @@ use macroquad::math::Vec2;
 use solitaire_core::Game;
 
 use crate::anim::{Animator, Cue};
+use crate::feedback::{Feedback, Target};
 use crate::gesture::Gesture;
 use crate::layout::{Button, Insets};
 use crate::menu::{Menu, MenuHit, Row, Tab, apply};
@@ -68,6 +69,7 @@ pub struct App {
     /// The menu reopens on the tab it was closed on.
     last_tab: Tab,
     clock: f64,
+    feedback: Feedback,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -174,6 +176,7 @@ impl App {
             save_failed: false,
             last_tab: Tab::Settings,
             clock: now,
+            feedback: Feedback::default(),
         };
         app.update(screen, now);
         app
@@ -236,10 +239,27 @@ impl App {
         Palette::lerp(&self.fade.from, &target, t)
     }
 
+    /// How lit `target` is by a recent press, 0 to 1.
+    #[must_use]
+    pub fn feedback(&self, target: Target, now: f64) -> f32 {
+        self.feedback.level(target, now)
+    }
+
     pub fn handle(&mut self, gesture: Gesture, now: f64) {
         if self.menu.is_some() {
             self.handle_menu(gesture, now);
         } else {
+            if let Gesture::Tap(p) = gesture
+                && let Some(&(button, _)) = self
+                    .table
+                    .layout()
+                    .buttons
+                    .iter()
+                    .find(|(_, r)| r.contains(p))
+                && self.table.is_enabled(button)
+            {
+                self.feedback.press(Target::Button(button), now);
+            }
             self.table.set_clock(now);
             self.table.handle(gesture);
         }
@@ -334,7 +354,9 @@ impl App {
         self.clock = now;
         let Some(m) = &mut self.menu else { return };
         match gesture {
-            Gesture::Tap(p) => match m.menu.hit(p, m.scroll, m.tab) {
+            Gesture::Tap(p) => match m.menu.hit(p, m.scroll, m.tab).inspect(|&hit| {
+                self.feedback.press(Target::Menu(hit), now);
+            }) {
                 Some(MenuHit::Done) => {
                     self.last_tab = m.tab;
                     self.menu = None;

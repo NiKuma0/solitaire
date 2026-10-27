@@ -10,54 +10,57 @@ use super::shapes::{fill_rounded, stroke_rounded};
 use super::text::{Align, draw_label};
 use solitaire_core::DrawMode;
 
+use super::widgets::{SELECTED, draw_pill, draw_toggle};
 use crate::app::MenuView;
 use crate::menu::{
-    ABOUT_LINE, ABOUT_LINES, CHART_GAMES, FACT_ROW, HISTORY_ROWS, LABEL_SIZE, Menu, Row, TABLE_ROW,
-    Tab, selected,
+    ABOUT_LINE, ABOUT_LINES, CHART_GAMES, FACT_ROW, HISTORY_ROWS, LABEL_SIZE, Menu, MenuHit, Row,
+    TABLE_ROW, Tab, selected,
 };
 use crate::settings::Settings;
 use crate::stats::{Stats, utc_date};
 use crate::theme::faded;
 
-pub fn draw(view: MenuView, settings: Settings, stats: &Stats, ctx: &Ctx) {
+/// `lit` gives the press feedback level of a control.
+pub fn draw(
+    view: MenuView,
+    settings: Settings,
+    stats: &Stats,
+    lit: &dyn Fn(MenuHit) -> f32,
+    ctx: &Ctx,
+) {
     let m = view.menu;
     let p = &ctx.palette;
     draw_rectangle(-1.0, -1.0, 1.0e5, 1.0e5, faded(p.bg, 0.9));
     fill_rounded(m.panel, 16.0, p.bg);
     stroke_rounded(m.panel, 16.0, 1.0, p.line);
 
-    let bold = ctx.fonts.semibold.as_ref();
     for (tab, r) in m.tabs {
-        if tab == view.tab {
-            fill_rounded(r, 10.0, faded(p.text, 0.15));
-        }
-        let color = if tab == view.tab {
-            p.text
+        let level = if tab == view.tab {
+            SELECTED
         } else {
-            faded(p.text, 0.6)
+            lit(MenuHit::Tab(tab))
         };
-        draw_label(
-            tab.label(),
-            r.center(),
-            LABEL_SIZE,
-            color,
-            Align::Center,
-            bold,
-        );
+        draw_pill(r, tab.label(), level, ctx);
     }
-    fill_rounded(m.done, 10.0, p.accent);
-    draw_label("Done", m.done.center(), 16.0, p.on, Align::Center, bold);
+    draw_pill(m.done, "Done", lit(MenuHit::Done), ctx);
 
     // Content scrolls under the title bar: clip it to the viewport.
     clip_to(m.viewport);
     match view.tab {
-        Tab::Settings => draw_settings(m, view.scroll, settings, view.confirm_reset, ctx),
+        Tab::Settings => draw_settings(m, view.scroll, settings, view.confirm_reset, lit, ctx),
         Tab::Stats => draw_stats(m, view.scroll, stats, ctx),
     }
     set_default_camera();
 }
 
-fn draw_settings(m: &Menu, scroll: f32, settings: Settings, confirm_reset: bool, ctx: &Ctx) {
+fn draw_settings(
+    m: &Menu,
+    scroll: f32,
+    settings: Settings,
+    confirm_reset: bool,
+    lit: &dyn Fn(MenuHit) -> f32,
+    ctx: &Ctx,
+) {
     let p = &ctx.palette;
     let regular = ctx.fonts.regular.as_ref();
     let up = |r: Rect| r.offset(vec2(0.0, -scroll));
@@ -78,32 +81,24 @@ fn draw_settings(m: &Menu, scroll: f32, settings: Settings, confirm_reset: bool,
         );
         let current = selected(&settings, row.row);
         if row.row.is_toggle() {
-            draw_switch(up(row.targets[0]), current == Some(1), ctx);
+            let level = lit(MenuHit::Toggle(row.row));
+            draw_toggle(up(row.targets[0]), current == Some(1), level, ctx);
         } else if let Some(text) = row.row.action() {
-            let r = up(row.targets[0]);
             let confirming = row.row == Row::ResetStats && confirm_reset;
-            if confirming {
-                fill_rounded(r, 10.0, p.accent);
+            let (text, level) = if confirming {
+                ("Confirm", SELECTED)
             } else {
-                stroke_rounded(r, 10.0, 1.5, faded(p.text, 0.6));
-            }
-            let (text, color) = if confirming {
-                ("Confirm", p.on)
-            } else {
-                (text, p.text)
+                (text, lit(MenuHit::Action(row.row)))
             };
-            draw_label(text, r.center(), LABEL_SIZE, color, Align::Center, regular);
+            draw_pill(up(row.targets[0]), text, level, ctx);
         } else {
             for (i, (&target, option)) in row.targets.iter().zip(row.row.options()).enumerate() {
-                let r = up(target);
-                let on = current == Some(i);
-                if on {
-                    fill_rounded(r, 10.0, p.accent);
+                let level = if current == Some(i) {
+                    SELECTED
                 } else {
-                    stroke_rounded(r, 10.0, 1.5, faded(p.text, 0.6));
-                }
-                let fg = if on { p.on } else { p.text };
-                draw_label(option, r.center(), LABEL_SIZE, fg, Align::Center, regular);
+                    lit(MenuHit::Choose(row.row, i))
+                };
+                draw_pill(up(target), option, level, ctx);
             }
         }
     }
@@ -311,28 +306,6 @@ fn draw_chart(area: Rect, stats: &Stats, ctx: &Ctx) {
         let x = bars.x + slot * i as f32 + slot * 0.15;
         draw_rectangle(x, bars.bottom() - h, slot * 0.7, h, color);
     }
-}
-
-fn draw_switch(target: Rect, on: bool, ctx: &Ctx) {
-    let p = &ctx.palette;
-    let track = Rect::new(
-        target.x + 4.0,
-        target.center().y - 14.0,
-        target.w - 8.0,
-        28.0,
-    );
-    if on {
-        fill_rounded(track, 14.0, p.accent);
-    } else {
-        stroke_rounded(track, 14.0, 1.5, faded(p.text, 0.6));
-    }
-    let knob_x = if on {
-        track.right() - 14.0
-    } else {
-        track.x + 14.0
-    };
-    let knob = if on { p.on } else { faded(p.text, 0.6) };
-    macroquad::shapes::draw_circle(knob_x, track.center().y, 10.0, knob);
 }
 
 /// Limits drawing to `r` (logical pixels) while keeping screen coordinates.

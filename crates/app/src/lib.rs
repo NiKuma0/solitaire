@@ -6,6 +6,7 @@ pub mod anim;
 pub mod app;
 pub mod app_icon;
 pub mod config;
+pub mod feedback;
 pub mod fonts;
 pub mod gesture;
 pub mod hit;
@@ -34,3 +35,7 @@ mod suit_tests;
 #[cfg(test)]
 #[path = "tests/icon.rs"]
 mod icon_tests;
+
+#[cfg(test)]
+#[path = "tests/widgets.rs"]
+mod widget_tests;
