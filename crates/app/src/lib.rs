@@ -6,6 +6,7 @@ pub mod config;
 pub mod gesture;
 pub mod hit;
 pub mod layout;
+pub mod render;
 pub mod table;
 pub mod theme;
 

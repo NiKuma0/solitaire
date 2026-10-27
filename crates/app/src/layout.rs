@@ -179,7 +179,7 @@ fn toolbar_buttons(toolbar: Rect) -> ([(Button, Rect); 4], Rect) {
         Button::AutoComplete,
     ];
     let count = order.len() as f32;
-    let width = ((toolbar.w * 0.75 - (count - 1.0) * BUTTON_SPACING) / count)
+    let width = ((toolbar.w * 0.65 - (count - 1.0) * BUTTON_SPACING) / count)
         .clamp(BUTTON_HEIGHT, BUTTON_MAX_WIDTH);
     let height = BUTTON_HEIGHT.min(toolbar.h);
     let y = toolbar.y + (toolbar.h - height) / 2.0;
