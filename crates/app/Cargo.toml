@@ -1,0 +1,20 @@
+[package]
+name = "solitaire-app"
+description = "Klondike solitaire for web, desktop and Android."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "solitaire"
+path = "src/main.rs"
+
+[dependencies]
+solitaire-core.workspace = true
+macroquad.workspace = true
+
+[lints]
+workspace = true

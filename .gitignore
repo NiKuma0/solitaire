@@ -1,0 +1,6 @@
+/target
+/dist
+*.pending-snap
+*.snap.new
+/PROMPT.md
+/.playwright-mcp
