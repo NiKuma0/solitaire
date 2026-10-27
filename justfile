@@ -30,10 +30,10 @@ deny:
 shear:
     cargo shear
 
-# Line coverage of core; fails below the SPEC §10 threshold. Needs cargo-llvm-cov.
+# Line coverage of core code (test folders excluded); fails below SPEC §10. Needs cargo-llvm-cov.
 cov:
     rustup component add llvm-tools
-    cargo llvm-cov nextest -p solitaire-core --locked --fail-under-lines 90 --summary-only
+    cargo llvm-cov nextest -p solitaire-core --locked --ignore-filename-regex '/tests/' --fail-under-lines 90 --summary-only
 
 # Run the desktop build.
 run *args:
