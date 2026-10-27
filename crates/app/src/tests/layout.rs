@@ -4,17 +4,7 @@ use macroquad::math::{Rect, Vec2, vec2};
 use solitaire_core::{Board, Card, Column, DrawMode, PileId, Rank, Suit};
 
 use super::*;
-
-/// SPEC §7.4 check sizes.
-pub(crate) const SIZES: [(f32, f32); 7] = [
-    (360.0, 640.0),
-    (390.0, 844.0),
-    (768.0, 1024.0),
-    (1280.0, 720.0),
-    (1920.0, 1080.0),
-    (2560.0, 1440.0),
-    (640.0, 360.0),
-];
+use crate::test_support::SIZES;
 
 fn layout(w: f32, h: f32) -> Layout {
     Layout::new(vec2(w, h), Insets::default())
