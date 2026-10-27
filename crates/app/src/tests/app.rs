@@ -4,10 +4,12 @@ use macroquad::math::{Vec2, vec2};
 use solitaire_core::{DrawMode, Game, PileId};
 
 use super::*;
+use crate::controls::Step;
 use crate::dialog::DialogLayout;
 use crate::feedback::Target;
 use crate::gesture::{DRAG_THRESHOLD, Gesture};
 use crate::layout::{Button, Insets};
+use crate::main_menu::{Item, MainHit, MainMenu};
 use crate::menu::{MenuHit, Row};
 use crate::picker::PickerLayout;
 use crate::reveal::Reveal;
@@ -51,6 +53,27 @@ fn start_new_game(a: &mut App, now: f64) {
     }
 }
 
+/// Opens the menu screen from the game.
+fn open_menu_screen(a: &mut App, now: f64) -> MainMenu {
+    let p = button(a, Button::Settings);
+    tap(a, p, now);
+    MainMenu::new(a.table().layout())
+}
+
+fn item(m: &MainMenu, item: Item) -> Vec2 {
+    m.items
+        .iter()
+        .find(|(i, _)| *i == item)
+        .map(|(_, r)| r.center())
+        .expect("item")
+}
+
+/// Opens the settings panel through the menu screen.
+fn open_settings(a: &mut App, now: f64) {
+    let m = open_menu_screen(a, now);
+    tap(a, item(&m, Item::Settings), now);
+}
+
 fn row_target(a: &App, row: Row, i: usize) -> Vec2 {
     let view = a.menu().expect("menu open");
     let (menu, scroll) = (view.menu, view.scroll);
@@ -59,14 +82,15 @@ fn row_target(a: &App, row: Row, i: usize) -> Vec2 {
 }
 
 #[test]
-fn settings_button_opens_the_menu_and_done_closes_it() {
+fn settings_open_from_the_menu_screen_and_done_goes_back_to_it() {
     let mut a = app(390.0, 844.0, Settings::default());
     assert!(a.menu().is_none());
-    let p = button(&a, Button::Settings);
-    tap(&mut a, p, 1.0);
+    open_settings(&mut a, 1.0);
+    assert_eq!(a.menu().expect("open").tab, Tab::Settings);
     let done = a.menu().expect("open").menu.done.center();
     tap(&mut a, done, 2.0);
     assert!(a.menu().is_none());
+    assert_eq!(a.view(), Screen::Menu);
 }
 
 #[test]
@@ -74,8 +98,7 @@ fn taps_on_the_menu_do_not_reach_the_table() {
     let mut a = app(390.0, 844.0, Settings::default());
     let before = a.table().game().board().clone();
     let stock = a.table().layout().stock.center();
-    let p = button(&a, Button::Settings);
-    tap(&mut a, p, 1.0);
+    open_settings(&mut a, 1.0);
     tap(&mut a, stock, 2.0);
     assert_eq!(a.table().game().board(), &before);
 }
@@ -83,8 +106,7 @@ fn taps_on_the_menu_do_not_reach_the_table() {
 #[test]
 fn choosing_a_theme_crossfades_to_it() {
     let mut a = app(390.0, 844.0, Settings::default());
-    let p = button(&a, Button::Settings);
-    tap(&mut a, p, 1.0);
+    open_settings(&mut a, 1.0);
     let light = row_target(&a, Row::Theme, 1);
     tap(&mut a, light, 2.0);
     assert_eq!(a.settings().theme, ThemeId::Light);
@@ -108,8 +130,7 @@ fn theme_changes_are_instant_without_animations() {
             ..Settings::default()
         },
     );
-    let p = button(&a, Button::Settings);
-    tap(&mut a, p, 1.0);
+    open_settings(&mut a, 1.0);
     let warm = row_target(&a, Row::Theme, 3);
     tap(&mut a, warm, 2.0);
     assert_eq!(a.palette(2.0), palette(ThemeId::Warm));
@@ -119,8 +140,7 @@ fn theme_changes_are_instant_without_animations() {
 fn menu_changes_reach_the_table() {
     let mut a = app(390.0, 844.0, Settings::default());
     let right = a.table().layout().stock.x;
-    let p = button(&a, Button::Settings);
-    tap(&mut a, p, 1.0);
+    open_settings(&mut a, 1.0);
     let left_handed = a
         .menu()
         .expect("open")
@@ -139,8 +159,7 @@ fn menu_changes_reach_the_table() {
 #[test]
 fn short_screens_scroll_the_menu_by_dragging() {
     let mut a = app(640.0, 360.0, Settings::default());
-    let p = button(&a, Button::Settings);
-    tap(&mut a, p, 1.0);
+    open_settings(&mut a, 1.0);
     let menu = a.menu().expect("open").menu;
     let max = menu.max_scroll(a.menu().expect("open").tab);
     let start = menu.viewport.center();
@@ -296,8 +315,7 @@ fn finished_games_go_into_saved_statistics() {
 #[test]
 fn settings_changes_are_saved() {
     let mut a = App::start(Box::new(MemoryStorage::default()), startup(5, false));
-    let p = button(&a, Button::Settings);
-    tap(&mut a, p, 1.0);
+    open_settings(&mut a, 1.0);
     let large = a
         .menu()
         .expect("open")
@@ -337,11 +355,6 @@ fn a_failed_save_is_reported_not_fatal() {
 
 use crate::menu::Tab;
 
-fn open_menu(a: &mut App, now: f64) {
-    let p = button(a, Button::Settings);
-    tap(a, p, now);
-}
-
 fn action(a: &App, row: Row) -> Vec2 {
     let view = a.menu().expect("open");
     let r = view.menu.rows.iter().find(|r| r.row == row).expect("row");
@@ -351,7 +364,7 @@ fn action(a: &App, row: Row) -> Vec2 {
 #[test]
 fn tabs_switch_and_the_choice_is_remembered() {
     let mut a = app(390.0, 844.0, Settings::default());
-    open_menu(&mut a, 1.0);
+    open_settings(&mut a, 1.0);
     assert_eq!(a.menu().expect("open").tab, Tab::Settings);
     let stats = a.menu().expect("open").menu.tabs[0].1.center();
     tap(&mut a, stats, 2.0);
@@ -359,8 +372,13 @@ fn tabs_switch_and_the_choice_is_remembered() {
     assert_eq!(a.menu().expect("open").scroll, 0.0);
     let done = a.menu().expect("open").menu.done.center();
     tap(&mut a, done, 3.0);
-    open_menu(&mut a, 4.0);
-    assert_eq!(a.menu().expect("open").tab, Tab::Stats);
+    let m = MainMenu::new(a.table().layout());
+    tap(&mut a, item(&m, Item::Stats), 4.0);
+    assert_eq!(
+        a.menu().expect("open").tab,
+        Tab::Stats,
+        "the pill picks the tab"
+    );
 }
 
 #[test]
@@ -369,7 +387,7 @@ fn restart_from_the_menu_redeals_and_closes_it() {
     let fresh = a.table().game().board().clone();
     let stock = a.table().layout().stock.center();
     tap(&mut a, stock, 1.0);
-    open_menu(&mut a, 2.0);
+    open_settings(&mut a, 2.0);
     let p = action(&a, Row::Restart);
     tap(&mut a, p, 3.0);
     assert!(a.menu().is_none());
@@ -389,7 +407,7 @@ fn reset_statistics_needs_a_second_tap_soon_after() {
     start_new_game(&mut a, 1.2);
     assert_eq!(a.stats().tally(None).played, 1);
 
-    open_menu(&mut a, 2.0);
+    open_settings(&mut a, 2.0);
     let reset = action(&a, Row::ResetStats);
     tap(&mut a, reset, 3.0);
     assert!(a.menu().expect("open").confirm_reset);
@@ -445,7 +463,7 @@ fn space_recycles_an_empty_stock() {
 #[test]
 fn shortcuts_wait_while_the_menu_is_open() {
     let mut a = app(1280.0, 720.0, Settings::default());
-    open_menu(&mut a, 1.0);
+    open_settings(&mut a, 1.0);
     a.shortcut(Shortcut::Draw, 0.0);
     assert_eq!(a.table().game().board().waste.len(), 0);
 }
@@ -473,8 +491,7 @@ fn disabled_buttons_do_not_light() {
 #[test]
 fn tapping_a_menu_control_lights_it() {
     let mut a = app(390.0, 844.0, Settings::default());
-    let p = button(&a, Button::Settings);
-    tap(&mut a, p, 1.0);
+    open_settings(&mut a, 1.0);
     let draw3 = row_target(&a, Row::Draw, 1);
     tap(&mut a, draw3, 2.0);
     assert_eq!(
@@ -600,4 +617,104 @@ fn tapping_outside_the_dialog_cancels_and_reaches_nothing_else() {
         a.dialog().is_some_and(Reveal::is_open),
         "taps on the panel keep it"
     );
+}
+
+#[test]
+fn the_menu_button_opens_the_menu_screen_and_back_returns() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    assert_eq!(a.view(), Screen::Game);
+    open_menu_screen(&mut a, 1.0);
+    assert_eq!(a.view(), Screen::Menu);
+    let back = button(&a, Button::Settings);
+    tap(&mut a, back, 2.0);
+    assert_eq!(a.view(), Screen::Game);
+}
+
+#[test]
+fn taps_on_the_menu_screen_do_not_reach_the_cards() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let before = a.table().game().board().clone();
+    open_menu_screen(&mut a, 1.0);
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 2.0);
+    assert_eq!(a.table().game().board(), &before);
+}
+
+#[test]
+fn selectors_change_draw_and_hand_and_are_saved() {
+    let mut a = App::start(Box::new(MemoryStorage::default()), startup(5, false));
+    let m = open_menu_screen(&mut a, 1.0);
+    tap(&mut a, m.draw.next.center(), 2.0);
+    assert_eq!(a.settings().draw, DrawMode::Three);
+    tap(&mut a, m.hand.prev.center(), 3.0);
+    assert!(a.settings().left_handed);
+    let saved: Settings =
+        serde_json::from_str(&a.storage().get(persist::SETTINGS_KEY).expect("saved")).unwrap();
+    assert_eq!(saved.draw, DrawMode::Three);
+    assert!(saved.left_handed);
+    assert_eq!(m.hit(m.draw.next.center()), Some(MainHit::Draw(Step::Next)));
+}
+
+#[test]
+fn statistics_and_about_open_their_part_of_the_panel() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let m = open_menu_screen(&mut a, 1.0);
+    tap(&mut a, item(&m, Item::Stats), 2.0);
+    assert_eq!(a.menu().expect("open").tab, Tab::Stats);
+    let done = a.menu().expect("open").menu.done.center();
+    tap(&mut a, done, 3.0);
+    tap(&mut a, item(&m, Item::About), 4.0);
+    let view = a.menu().expect("open");
+    assert_eq!(view.tab, Tab::Settings);
+    assert_eq!(
+        view.scroll,
+        view.menu.max_scroll(Tab::Settings),
+        "scrolled to About"
+    );
+}
+
+#[test]
+fn a_new_draw_mode_redeals_an_untouched_game_on_the_way_back() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let seed = a.table().game().seed();
+    let m = open_menu_screen(&mut a, 1.0);
+    tap(&mut a, m.draw.next.center(), 2.0);
+    let back = button(&a, Button::Settings);
+    tap(&mut a, back, 3.0);
+    assert_eq!(a.table().game().draw_mode(), DrawMode::Three);
+    assert_ne!(a.table().game().seed(), seed);
+    assert!(a.dialog().is_none());
+}
+
+#[test]
+fn a_new_draw_mode_asks_before_replacing_a_game_in_progress() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 0.5);
+    let before = a.table().game().board().clone();
+    let m = open_menu_screen(&mut a, 1.0);
+    tap(&mut a, m.draw.next.center(), 2.0);
+    let back = button(&a, Button::Settings);
+    tap(&mut a, back, 3.0);
+    assert_eq!(a.view(), Screen::Game);
+    assert!(a.dialog().is_some_and(Reveal::is_open));
+    let d = DialogLayout::new(a.table().layout());
+    tap(&mut a, d.cancel.center(), 4.0);
+    assert_eq!(a.table().game().board(), &before, "kept");
+    assert_eq!(a.table().game().draw_mode(), DrawMode::One);
+
+    open_menu_screen(&mut a, 5.0);
+    tap(&mut a, back, 6.0);
+    assert!(a.dialog().is_none(), "asks only right after the change");
+}
+
+#[test]
+fn screens_fade_through_the_background() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    open_menu_screen(&mut a, 1.0);
+    assert_eq!(a.shown_screen(1.0), (Screen::Game, 1.0));
+    let (screen, opacity) = a.shown_screen(1.1);
+    assert_eq!(screen, Screen::Game);
+    assert!(opacity < 1.0 && opacity > 0.0);
+    assert_eq!(a.shown_screen(5.0), (Screen::Menu, 1.0));
 }

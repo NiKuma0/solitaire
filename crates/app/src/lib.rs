@@ -6,12 +6,14 @@ pub mod anim;
 pub mod app;
 pub mod app_icon;
 pub mod config;
+pub mod controls;
 pub mod dialog;
 pub mod feedback;
 pub mod fonts;
 pub mod gesture;
 pub mod hit;
 pub mod layout;
+pub mod main_menu;
 pub mod menu;
 pub mod persist;
 pub mod picker;
@@ -23,6 +25,7 @@ pub mod stats;
 pub mod storage;
 pub mod table;
 pub mod theme;
+pub mod transition;
 
 pub use theme::PAGE_HEX;
 

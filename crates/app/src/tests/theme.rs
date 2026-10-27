@@ -228,3 +228,18 @@ fn a_faded_palette_scales_every_opacity() {
     assert_eq!(half.text.r, p.text.r);
     assert_eq!(p.faded(1.0), p);
 }
+
+#[test]
+fn dimming_mixes_every_colour_towards_the_background_and_stays_opaque() {
+    let p = palette(ThemeId::Light);
+    assert_eq!(p.dimmed(0.0), p);
+    let gone = p.dimmed(1.0);
+    assert_eq!((gone.text, gone.accent, gone.face), (p.bg, p.bg, p.bg));
+    let half = p.dimmed(0.5);
+    assert_eq!(half.text, mix(p.text, p.bg, 0.5));
+    assert_eq!(half.text.a, 1.0);
+    assert_eq!(
+        half.shadow.a, p.shadow.a,
+        "translucent tokens keep their opacity"
+    );
+}

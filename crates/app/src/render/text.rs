@@ -21,6 +21,13 @@ pub fn raster_size(size: f32) -> (u16, f32) {
     (pixels as u16, size / pixels)
 }
 
+/// Width of `text` drawn at `size`.
+#[must_use]
+pub fn label_width(text: &str, size: f32, font: Option<&Font>) -> f32 {
+    let (font_size, font_scale) = raster_size(size);
+    measure_text(text, font, font_size, font_scale).width
+}
+
 /// Text vertically centred on `at.y`.
 pub fn draw_label(
     text: &str,

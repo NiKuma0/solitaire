@@ -4,10 +4,12 @@ use macroquad::math::Vec2;
 use solitaire_core::Game;
 
 use crate::anim::{Animator, Cue};
+use crate::controls::step;
 use crate::dialog::{self, DialogHit, DialogLayout};
 use crate::feedback::{Feedback, Target};
 use crate::gesture::Gesture;
 use crate::layout::{Button, Insets};
+use crate::main_menu::{Item, MainHit, MainMenu};
 use crate::menu::{Menu, MenuHit, Row, Tab, apply};
 use crate::persist;
 use crate::picker::{Picker, PickerHit, PickerLayout};
@@ -18,6 +20,7 @@ use crate::stats::{GameRecord, Stats};
 use crate::storage::{MemoryStorage, Storage};
 use crate::table::{Event, Table};
 use crate::theme::{Palette, ThemeId, palette};
+use crate::transition::Transition;
 
 /// Theme crossfade length when animations are on.
 const FADE_SECONDS: f32 = 0.3;
@@ -69,13 +72,23 @@ pub struct App {
     unix_time: fn() -> u64,
     /// The last attempt to save failed (shown to the player).
     save_failed: bool,
-    /// The menu reopens on the tab it was closed on.
-    last_tab: Tab,
+    view: Screen,
+    /// Fading from the previous screen to `view`.
+    transition: Option<Transition<Screen>>,
+    /// Draw mode changed on this visit to the menu screen.
+    draw_changed: bool,
     clock: f64,
     feedback: Feedback,
     picker: Option<Picker>,
     /// "Start new game?", while it is open or closing.
     dialog: Option<Reveal>,
+}
+
+/// The full-screen views; the settings panel and dialogs sit on top.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    Game,
+    Menu,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,7 +193,9 @@ impl App {
             storage,
             unix_time,
             save_failed: false,
-            last_tab: Tab::Settings,
+            view: Screen::Game,
+            transition: None,
+            draw_changed: false,
             clock: now,
             feedback: Feedback::default(),
             picker: None,
@@ -272,6 +287,8 @@ impl App {
             self.handle_picker(gesture, now);
         } else if self.dialog.is_some_and(|d| d.is_open()) {
             self.handle_dialog(gesture, now);
+        } else if self.view == Screen::Menu {
+            self.handle_main_menu(gesture, now);
         } else if let Gesture::Tap(p) = gesture
             && self.button_at(p) == Some(Button::New)
         {
@@ -297,7 +314,7 @@ impl App {
     /// Keyboard shortcuts and other direct button presses.
     /// A keyboard shortcut (SPEC §8). Ignored while the menu is open.
     pub fn shortcut(&mut self, shortcut: Shortcut, now: f64) {
-        if self.menu.is_some() || self.dialog.is_some_and(|d| d.is_open()) {
+        if self.view != Screen::Game || self.dialog.is_some_and(|d| d.is_open()) {
             return;
         }
         match shortcut {
@@ -322,15 +339,8 @@ impl App {
         for event in self.table.drain_events() {
             match event {
                 Event::OpenSettings => {
-                    let menu = Menu::new(screen, self.insets);
-                    self.menu = Some(MenuState {
-                        menu,
-                        screen,
-                        tab: self.last_tab,
-                        scroll: 0.0,
-                        drag_anchor: None,
-                        confirm_reset_until: None,
-                    });
+                    self.draw_changed = false;
+                    self.go(Screen::Menu, now);
                 }
                 Event::OpenThemes => {
                     self.picker = Some(Picker::open(now, self.settings.animation));
@@ -371,6 +381,9 @@ impl App {
         if self.dialog.is_some_and(|d| d.is_gone(now)) {
             self.dialog = None;
         }
+        if self.transition.is_some_and(|t| t.is_done(now)) {
+            self.transition = None;
+        }
 
         let won = self.table.game().is_won();
         if won && !self.won {
@@ -397,7 +410,6 @@ impl App {
                 self.feedback.press(Target::Menu(hit), now);
             }) {
                 Some(MenuHit::Done) => {
-                    self.last_tab = m.tab;
                     self.menu = None;
                 }
                 Some(MenuHit::Tab(tab)) => {
@@ -405,9 +417,9 @@ impl App {
                     m.scroll = 0.0;
                 }
                 Some(MenuHit::Action(Row::Restart)) => {
-                    self.last_tab = m.tab;
                     self.menu = None;
                     self.table.restart();
+                    self.go(Screen::Game, now);
                 }
                 Some(MenuHit::Action(Row::ResetStats)) => {
                     if m.confirm_reset_until.is_some_and(|t| now < t) {
@@ -433,6 +445,93 @@ impl App {
                 scroll_to(m, p.y);
                 m.drag_anchor = None;
             }
+        }
+    }
+
+    /// The screen the player is on (or heading to).
+    #[must_use]
+    pub const fn view(&self) -> Screen {
+        self.view
+    }
+
+    /// The screen to draw at `now` and its opacity, mid-transition.
+    #[must_use]
+    pub fn shown_screen(&self, now: f64) -> (Screen, f32) {
+        self.transition
+            .map_or((self.view, 1.0), |t| t.frame(self.view, now))
+    }
+
+    fn go(&mut self, to: Screen, now: f64) {
+        if to != self.view {
+            self.transition = Some(Transition::new(self.view, now, self.settings.animation));
+            self.view = to;
+        }
+    }
+
+    /// Back arrow, palette, selectors and the three items; everything else is ignored.
+    fn handle_main_menu(&mut self, gesture: Gesture, now: f64) {
+        let Gesture::Tap(p) = gesture else {
+            return;
+        };
+        match self.button_at(p) {
+            Some(Button::Settings) => {
+                self.feedback.press(Target::Button(Button::Settings), now);
+                self.back_to_game(now);
+                return;
+            }
+            Some(Button::Theme) => {
+                self.picker = Some(Picker::open(now, self.settings.animation));
+                return;
+            }
+            _ => {}
+        }
+        let Some(hit) = MainMenu::new(self.table.layout()).hit(p) else {
+            return;
+        };
+        self.feedback.press(Target::Main(hit), now);
+        match hit {
+            MainHit::Draw(s) => {
+                let current = usize::from(self.settings.draw == solitaire_core::DrawMode::Three);
+                if let Some(i) = step(current, 2, s) {
+                    self.change_setting(MenuHit::Choose(Row::Draw, i), now);
+                    self.draw_changed = true;
+                }
+            }
+            MainHit::Hand(s) => {
+                let current = usize::from(!self.settings.left_handed);
+                if step(current, 2, s).is_some() {
+                    self.change_setting(MenuHit::Toggle(Row::LeftHanded), now);
+                }
+            }
+            MainHit::Item(item) => self.open_panel(item),
+        }
+    }
+
+    /// The settings panel, on the part `item` stands for.
+    fn open_panel(&mut self, item: Item) {
+        let menu = Menu::new(self.screen, self.insets);
+        let (tab, scroll) = match item {
+            Item::Settings => (Tab::Settings, 0.0),
+            Item::Stats => (Tab::Stats, 0.0),
+            Item::About => (Tab::Settings, menu.max_scroll(Tab::Settings)),
+        };
+        self.menu = Some(MenuState {
+            menu,
+            screen: self.screen,
+            tab,
+            scroll,
+            drag_anchor: None,
+            confirm_reset_until: None,
+        });
+    }
+
+    /// Back to the game; a new draw mode deals at once, or asks if the game is under way.
+    fn back_to_game(&mut self, now: f64) {
+        self.go(Screen::Game, now);
+        if std::mem::take(&mut self.draw_changed)
+            && self.settings.draw != self.table.game().draw_mode()
+        {
+            self.new_game(now);
         }
     }
 

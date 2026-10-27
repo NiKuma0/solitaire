@@ -3,6 +3,7 @@
 use crate::anim::ease_out_cubic;
 use crate::dialog::DialogHit;
 use crate::layout::Button;
+use crate::main_menu::MainHit;
 use crate::menu::MenuHit;
 
 /// How long a press flash takes to fade out.
@@ -14,6 +15,7 @@ pub enum Target {
     Button(Button),
     Menu(MenuHit),
     Dialog(DialogHit),
+    Main(MainHit),
 }
 
 /// The last press; one flash at a time.

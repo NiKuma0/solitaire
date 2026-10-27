@@ -124,6 +124,19 @@ impl Palette {
             disabled, on, shadow)
     }
 
+    /// Every colour mixed `k` of the way to the background, keeping its opacity:
+    /// a screen fading in or out over the flat background, without translucency.
+    #[must_use]
+    pub fn dimmed(&self, k: f32) -> Self {
+        let bg = self.bg;
+        let d = |c: Color, _: Color| {
+            let m = mix(c, bg, k);
+            Color::new(m.r, m.g, m.b, c.a)
+        };
+        each_colour!(self, self, d; bg, accent, face, slot, text, ink, red, blue, green, muted, line,
+            track, disabled, on, shadow)
+    }
+
     /// Every colour with its opacity scaled by `alpha`, for fading a whole panel.
     #[must_use]
     pub fn faded(&self, alpha: f32) -> Self {

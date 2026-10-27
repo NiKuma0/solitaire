@@ -3,13 +3,14 @@
 //! `level` is the press feedback from `crate::feedback`: 0 at rest, 1 just pressed.
 
 use macroquad::color::Color;
-use macroquad::math::{Rect, Vec2};
+use macroquad::math::{Rect, Vec2, vec2};
 use macroquad::shapes::draw_circle;
 
 use super::Ctx;
 use super::icon::{Icon, icon_shapes};
 use super::shapes::{fill_rounded, fill_shapes, stroke_circle, stroke_rounded};
-use super::text::{Align, draw_label};
+use super::text::{Align, draw_label, label_width};
+use crate::controls::Selector;
 use crate::theme::{Palette, faded, mix};
 
 /// The feedback level of a chosen option: it stays filled.
@@ -18,6 +19,8 @@ pub const LABEL_SIZE: f32 = 15.0;
 const ICON_SIZE: f32 = 24.0;
 const RING_RADIUS: f32 = 20.0;
 const OUTLINE: f32 = 1.0;
+const PILL_ICON: f32 = 20.0;
+const ICON_GAP: f32 = 8.0;
 
 /// Fill and text colour of a pill lit to `level`.
 #[must_use]
@@ -28,6 +31,54 @@ pub fn pill_colours(p: &Palette, level: f32) -> (Color, Color) {
 #[must_use]
 pub const fn toggle_label(on: bool) -> &'static str {
     if on { "ON" } else { "OFF" }
+}
+
+/// A pill with an icon before its label, the pair centred.
+pub fn draw_pill_icon(r: Rect, icon: Icon, label: &str, level: f32, ctx: &Ctx) {
+    let p = &ctx.palette;
+    let radius = r.h / 2.0;
+    let (fill, text) = pill_colours(p, level);
+    if level > 0.0 {
+        fill_rounded(r, radius, fill);
+    }
+    stroke_rounded(r, radius, OUTLINE, p.line);
+    let font = ctx.fonts.regular.as_ref();
+    let icon_size = PILL_ICON;
+    let width = icon_size + ICON_GAP + label_width(label, LABEL_SIZE, font);
+    let x = r.center().x - width / 2.0;
+    let y = r.center().y;
+    fill_shapes(
+        &icon_shapes(icon, vec2(x + icon_size / 2.0, y), icon_size),
+        text,
+    );
+    let at = vec2(x + icon_size + ICON_GAP, y);
+    draw_label(label, at, LABEL_SIZE, text, Align::Left, font);
+}
+
+/// "‹ value ›"; a chevron is hidden where there is nothing further that way.
+pub fn draw_selector(
+    s: &Selector,
+    value: &str,
+    (has_prev, has_next): (bool, bool),
+    (lit_prev, lit_next): (f32, f32),
+    ctx: &Ctx,
+) {
+    let p = &ctx.palette;
+    if has_prev {
+        draw_icon_button(s.prev.center(), Icon::Prev, p.text, lit_prev, ctx);
+    }
+    if has_next {
+        draw_icon_button(s.next.center(), Icon::Next, p.text, lit_next, ctx);
+    }
+    let font = ctx.fonts.regular.as_ref();
+    draw_label(
+        value,
+        s.value.center(),
+        LABEL_SIZE,
+        p.text,
+        Align::Center,
+        font,
+    );
 }
 
 /// A rounded button with a centred label.

@@ -2,6 +2,7 @@
 
 mod card;
 pub mod icon;
+mod main_menu;
 mod menu;
 mod shapes;
 pub mod suit;
@@ -14,7 +15,7 @@ use macroquad::shapes::{draw_circle, draw_rectangle};
 use macroquad::window::clear_background;
 use solitaire_core::PileId;
 
-use crate::app::App;
+use crate::app::{App, Screen};
 use crate::dialog::{self, DialogHit, DialogLayout};
 use crate::feedback::Target;
 use crate::fonts::Fonts;
@@ -31,6 +32,7 @@ use text::{Align, draw_label};
 use widgets::{SELECTED, draw_icon_button, draw_pill};
 
 /// What every drawing helper needs.
+#[derive(Clone, Copy)]
 pub struct Ctx<'a> {
     pub palette: Palette,
     pub fonts: &'a Fonts,
@@ -41,20 +43,41 @@ pub struct Ctx<'a> {
 }
 
 pub fn draw(app: &App, fonts: &Fonts, now: f64) {
-    let settings = app.settings();
-    let table = app.table();
-    let l = table.layout();
-    let ctx = Ctx {
+    let l = app.table().layout();
+    let full = Ctx {
         palette: app.palette(now),
         fonts,
-        settings: *settings,
+        settings: *app.settings(),
         large: l.large_cards,
         card_width: l.card.x,
     };
     prewarm_text(fonts, l);
-    clear_background(ctx.palette.bg);
-    draw_slots(table, &ctx);
+    clear_background(full.palette.bg);
+    // Screens fade through the background; the theme button stays put.
+    let (screen, opacity) = app.shown_screen(now);
+    let ctx = Ctx {
+        palette: full.palette.dimmed(1.0 - opacity),
+        ..full
+    };
+    let picker = app
+        .picker()
+        .map_or(0.0, |picker| picker.reveal.progress(now));
+    match screen {
+        Screen::Game => draw_game(app, picker, now, &ctx),
+        Screen::Menu => main_menu::draw(app, picker, now, &ctx),
+    }
+    draw_theme_button(app, picker, now, &full);
+    if let Some(view) = app.menu() {
+        let lit = |hit| app.feedback(Target::Menu(hit), now);
+        menu::draw(view, *app.settings(), app.stats(), &lit, &full);
+    }
+}
 
+/// Cards, bars, and anything over the table.
+fn draw_game(app: &App, picker: f32, now: f64, ctx: &Ctx) {
+    let table = app.table();
+    let l = table.layout();
+    draw_slots(table, ctx);
     let game = table.game();
     let board = game.board();
     let anim = app.animator();
@@ -66,7 +89,7 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
     let in_plate = |p: &Placement| {
         !p.face_up && !p.dragged && board.tableau.iter().any(|c| c.cards().contains(&p.card))
     };
-    draw_plates(table, &scene, &|p| at_rest(p) && in_plate(p), &ctx);
+    draw_plates(table, &scene, &|p| at_rest(p) && in_plate(p), ctx);
     for p in anim.draw_order(&scene, now) {
         if in_plate(&p) && at_rest(&p) {
             continue;
@@ -81,25 +104,21 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
             shown.rect.y -= anim.win_lift(i, now) * l.card.y;
         }
         if shown.face_up {
-            draw_face(p.card, shown.rect, shown.scale_x, &ctx);
+            draw_face(p.card, shown.rect, shown.scale_x, ctx);
         } else {
-            draw_back(shown.rect, shown.scale_x, &ctx);
+            draw_back(shown.rect, shown.scale_x, ctx);
             if ctx.settings.card_count && board.stock.last() == Some(&p.card) && at_rest(&p) {
-                draw_count(shown.rect, board.stock.len(), &ctx);
+                draw_count(shown.rect, board.stock.len(), ctx);
             }
         }
     }
 
-    draw_bars(app, now, &ctx);
+    draw_bars(app, picker, now, ctx);
     if let Some(reveal) = app.dialog() {
-        draw_dialog(app, reveal.progress(now), now, &ctx);
+        draw_dialog(app, reveal.progress(now), now, ctx);
     }
     if game.is_won() && !anim.is_animating(now) {
-        draw_win(l, board.score, &ctx);
-    }
-    if let Some(view) = app.menu() {
-        let lit = |hit| app.feedback(Target::Menu(hit), now);
-        menu::draw(view, *settings, app.stats(), &lit, &ctx);
+        draw_win(l, board.score, ctx);
     }
 }
 
@@ -114,6 +133,7 @@ fn prewarm_text(fonts: &Fonts, l: &Layout) {
         16.0,
         18.0,
         20.0,
+        24.0,
         32.0,
     ]
     .into_iter()
@@ -166,40 +186,50 @@ fn draw_plates(
 }
 
 /// Header with the menu and score; new game, undo and redo at the bottom.
-fn draw_bars(app: &App, now: f64, ctx: &Ctx) {
+fn draw_bars(app: &App, picker: f32, now: f64, ctx: &Ctx) {
     let table = app.table();
     let l = table.layout();
     let p = &ctx.palette;
-    let picker = app
-        .picker()
-        .map_or(0.0, |picker| picker.reveal.progress(now));
-    if picker > 0.0 {
-        draw_picker(app, picker, ctx);
-    }
-    let center = l.status.center();
     // The open picker covers the menu and the score.
-    let shown = |b: Button| picker <= 0.0 || !matches!(b, Button::Settings);
     if picker <= 0.0 {
-        draw_status(app, center, ctx);
+        draw_status(app, l.status.center(), ctx);
     }
-    for &(button, rect) in l.buttons.iter().filter(|(b, _)| shown(*b)) {
+    for &(button, rect) in &l.buttons {
         let enabled = table.is_enabled(button);
         let level = app.feedback(Target::Button(button), now);
-        if button == Button::AutoComplete {
+        match button {
             // Only shown when it can be used.
-            if enabled {
+            Button::AutoComplete if enabled => {
                 draw_pill(rect, "Finish", SELECTED.max(level), ctx);
             }
-        } else if button == Button::Theme && picker > 0.0 {
-            // The button turns into an accent disc while the picker is out.
-            let c = rect.center();
-            draw_circle(c.x, c.y, PICKER_DISC, faded(p.accent, picker));
-            let color = mix(p.text, p.bg, picker);
-            fill_shapes(&icon_shapes(Icon::Palette, c, ICON), color);
-        } else {
-            let color = if enabled { p.text } else { p.disabled };
-            draw_icon_button(rect.center(), Icon::of(button), color, level, ctx);
+            // Drawn on top of every screen; hidden under the picker; unavailable.
+            Button::Theme | Button::AutoComplete => {}
+            Button::Settings if picker > 0.0 => {}
+            _ => {
+                let color = if enabled { p.text } else { p.disabled };
+                draw_icon_button(rect.center(), Icon::of(button), color, level, ctx);
+            }
         }
+    }
+}
+
+/// The palette button, and the picker growing out of it.
+fn draw_theme_button(app: &App, picker: f32, now: f64, ctx: &Ctx) {
+    let p = &ctx.palette;
+    let l = app.table().layout();
+    let Some(&(_, rect)) = l.buttons.iter().find(|(b, _)| *b == Button::Theme) else {
+        return;
+    };
+    if picker > 0.0 {
+        draw_picker(app, picker, ctx);
+        // The button turns into an accent disc while the picker is out.
+        let c = rect.center();
+        draw_circle(c.x, c.y, PICKER_DISC, faded(p.accent, picker));
+        let color = mix(p.text, p.bg, picker);
+        fill_shapes(&icon_shapes(Icon::Palette, c, ICON), color);
+    } else {
+        let level = app.feedback(Target::Button(Button::Theme), now);
+        draw_icon_button(rect.center(), Icon::Palette, p.text, level, ctx);
     }
 }
 
@@ -285,10 +315,7 @@ fn draw_dialog(app: &App, shown: f32, now: f64, ctx: &Ctx) {
     let rise = vec2(0.0, dialog::RISE * (1.0 - shown));
     let panel_ctx = Ctx {
         palette: p.faded(shown),
-        fonts: ctx.fonts,
-        settings: ctx.settings,
-        large: ctx.large,
-        card_width: ctx.card_width,
+        ..*ctx
     };
     let fp = &panel_ctx.palette;
     let panel = dl.panel.offset(rise);
