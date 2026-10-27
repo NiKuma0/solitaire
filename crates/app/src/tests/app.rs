@@ -198,3 +198,122 @@ fn a_rejected_tap_shakes_the_card() {
     }
     panic!("no deal with a stuck top card");
 }
+
+use crate::persist::{self, GAME_KEY};
+use crate::storage::{MemoryStorage, Storage, StorageError};
+
+fn startup(seed: u64, reduced_motion: bool) -> Startup {
+    Startup {
+        screen: vec2(390.0, 844.0),
+        insets: Insets::default(),
+        seed,
+        now: 0.0,
+        reduced_motion,
+        unix_time: || 1_700_000_000,
+    }
+}
+
+fn stored_game(a: &App) -> Option<Game> {
+    a.storage()
+        .get(GAME_KEY)
+        .and_then(|json| serde_json::from_str(&json).ok())
+}
+
+#[test]
+fn first_launch_starts_a_new_game_with_default_settings() {
+    let a = App::start(Box::new(MemoryStorage::default()), startup(77, false));
+    assert_eq!(a.table().game().seed(), 77);
+    assert_eq!(*a.settings(), Settings::default());
+}
+
+#[test]
+fn reduced_motion_turns_animations_off_on_first_launch_only() {
+    let a = App::start(Box::new(MemoryStorage::default()), startup(1, true));
+    assert_eq!(a.settings().animation, AnimSpeed::Off);
+
+    let mut storage = MemoryStorage::default();
+    persist::save_settings(&mut storage, &Settings::default()).unwrap();
+    let a = App::start(Box::new(storage), startup(1, true));
+    assert_eq!(
+        a.settings().animation,
+        AnimSpeed::Normal,
+        "a saved choice wins"
+    );
+}
+
+#[test]
+fn every_move_is_saved_and_a_restart_resumes_it() {
+    let mut a = App::start(Box::new(MemoryStorage::default()), startup(5, false));
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 1.0);
+    tap(&mut a, stock, 1.5);
+    assert_eq!(stored_game(&a).as_ref(), Some(a.table().game()));
+
+    let mut storage = MemoryStorage::default();
+    persist::save_game(&mut storage, a.table().game()).unwrap();
+    let resumed = App::start(Box::new(storage), startup(999, false));
+    assert_eq!(resumed.table().game(), a.table().game());
+}
+
+#[test]
+fn finished_games_go_into_saved_statistics() {
+    let mut a = App::start(Box::new(MemoryStorage::default()), startup(5, false));
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 1.0);
+    let p = button(&a, Button::New);
+    tap(&mut a, p, 2.0);
+    assert_eq!(a.stats().tally(None).played, 1);
+    let record = a.stats().history().back().copied().expect("recorded");
+    assert_eq!(record.date, 1_700_000_000);
+    assert!(!record.won);
+    let mut storage = MemoryStorage::default();
+    storage
+        .set(
+            persist::STATS_KEY,
+            &a.storage().get(persist::STATS_KEY).expect("saved"),
+        )
+        .unwrap();
+    assert_eq!(persist::load(&mut storage).stats, *a.stats());
+}
+
+#[test]
+fn settings_changes_are_saved() {
+    let mut a = App::start(Box::new(MemoryStorage::default()), startup(5, false));
+    let p = button(&a, Button::Settings);
+    tap(&mut a, p, 1.0);
+    let large = a
+        .menu()
+        .expect("open")
+        .0
+        .rows
+        .iter()
+        .find(|r| r.row == Row::LargeCards)
+        .expect("row")
+        .bounds
+        .center();
+    tap(&mut a, large, 2.0);
+    let saved: Settings =
+        serde_json::from_str(&a.storage().get(persist::SETTINGS_KEY).expect("saved")).unwrap();
+    assert!(saved.large_cards);
+}
+
+struct BrokenStorage;
+
+impl Storage for BrokenStorage {
+    fn get(&self, _key: &str) -> Option<String> {
+        None
+    }
+    fn set(&mut self, _key: &str, _value: &str) -> Result<(), StorageError> {
+        Err(StorageError::Refused)
+    }
+}
+
+#[test]
+fn a_failed_save_is_reported_not_fatal() {
+    let mut a = App::start(Box::new(BrokenStorage), startup(5, false));
+    assert!(!a.save_failed());
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 1.0);
+    assert!(a.save_failed());
+    assert_eq!(a.table().game().board().waste.len(), 1, "the game goes on");
+}

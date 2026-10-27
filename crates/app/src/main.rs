@@ -7,30 +7,28 @@ use macroquad::input::{
 use macroquad::math::{Vec2, vec2};
 use macroquad::time::get_time;
 use macroquad::window::{next_frame, screen_height, screen_width};
-use solitaire_app::app::App;
+use solitaire_app::app::{App, Startup};
 use solitaire_app::config::window_conf;
 use solitaire_app::fonts::Fonts;
 use solitaire_app::gesture::Recognizer;
 use solitaire_app::layout::{Button, Insets};
 use solitaire_app::render;
-use solitaire_app::settings::Settings;
-use solitaire_core::Game;
+use solitaire_app::storage::platform_storage;
 
 #[macroquad::main(window_conf)]
 async fn main() {
     // Milliseconds since the epoch: different every launch, no OS randomness needed.
     let seed = (macroquad::miniquad::date::now() * 1000.0) as u64;
-    let settings = Settings::default();
-    let game = Game::new(seed, settings.draw);
     let fonts = Fonts::load();
-    let mut app = App::new(
-        game,
-        screen(),
-        Insets::default(),
-        seed.rotate_left(32) ^ 0x5eed,
-        settings,
-        get_time(),
-    );
+    let startup = Startup {
+        screen: screen(),
+        insets: Insets::default(),
+        seed,
+        now: get_time(),
+        reduced_motion: solitaire_web_bridge::prefers_reduced_motion(),
+        unix_time: || macroquad::miniquad::date::now() as u64,
+    };
+    let mut app = App::start(platform_storage(), startup);
     let mut pointer = Recognizer::default();
     loop {
         let now = get_time();

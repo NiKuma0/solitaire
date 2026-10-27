@@ -7,8 +7,11 @@ use crate::anim::{Animator, Cue};
 use crate::gesture::Gesture;
 use crate::layout::{Button, Insets};
 use crate::menu::{Menu, MenuHit, apply};
+use crate::persist;
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
+use crate::stats::{GameRecord, Stats};
+use crate::storage::{MemoryStorage, Storage};
 use crate::table::{Event, Table};
 use crate::theme::{Palette, ThemeId, palette};
 
@@ -40,6 +43,25 @@ pub struct App {
     insets: Insets,
     cue: Cue,
     won: bool,
+    stats: Stats,
+    storage: Box<dyn Storage>,
+    /// Seconds since the Unix epoch, for dating finished games.
+    unix_time: fn() -> u64,
+    /// The last attempt to save failed (shown to the player).
+    save_failed: bool,
+}
+
+/// What the app needs from the platform to start.
+#[derive(Debug, Clone, Copy)]
+pub struct Startup {
+    pub screen: Vec2,
+    pub insets: Insets,
+    /// Seeds the first game when there is no saved one, and later new games.
+    pub seed: u64,
+    pub now: f64,
+    /// The system asks for reduced motion; applies when no settings are saved yet.
+    pub reduced_motion: bool,
+    pub unix_time: fn() -> u64,
 }
 
 impl App {
@@ -51,6 +73,51 @@ impl App {
         next_seed: u64,
         settings: Settings,
         now: f64,
+    ) -> Self {
+        let storage = Box::new(MemoryStorage::default());
+        Self::assemble(
+            game,
+            settings,
+            Stats::default(),
+            storage,
+            || 0,
+            (screen, insets, next_seed, now),
+        )
+    }
+
+    /// Resumes the saved game, settings and statistics, or starts fresh.
+    #[must_use]
+    pub fn start(mut storage: Box<dyn Storage>, env: Startup) -> Self {
+        let saved = persist::load(storage.as_mut());
+        let settings = saved.settings.unwrap_or_else(|| Settings {
+            animation: if env.reduced_motion {
+                AnimSpeed::Off
+            } else {
+                AnimSpeed::Normal
+            },
+            ..Settings::default()
+        });
+        let game = saved
+            .game
+            .unwrap_or_else(|| Game::new(env.seed, settings.draw));
+        let next_seed = env.seed.rotate_left(32) ^ 0x5eed;
+        Self::assemble(
+            game,
+            settings,
+            saved.stats,
+            storage,
+            env.unix_time,
+            (env.screen, env.insets, next_seed, env.now),
+        )
+    }
+
+    fn assemble(
+        game: Game,
+        settings: Settings,
+        stats: Stats,
+        storage: Box<dyn Storage>,
+        unix_time: fn() -> u64,
+        (screen, insets, next_seed, now): (Vec2, Insets, u64, f64),
     ) -> Self {
         let mut table = Table::new(game, screen, insets, next_seed);
         table.configure(&settings);
@@ -70,6 +137,10 @@ impl App {
             insets,
             cue: Cue::None,
             won: false,
+            stats,
+            storage,
+            unix_time,
+            save_failed: false,
         };
         app.update(screen, now);
         app
@@ -88,6 +159,21 @@ impl App {
     #[must_use]
     pub const fn animator(&self) -> &Animator {
         &self.anim
+    }
+
+    #[must_use]
+    pub const fn stats(&self) -> &Stats {
+        &self.stats
+    }
+
+    #[must_use]
+    pub fn storage(&self) -> &dyn Storage {
+        self.storage.as_ref()
+    }
+
+    #[must_use]
+    pub const fn save_failed(&self) -> bool {
+        self.save_failed
     }
 
     #[must_use]
@@ -156,7 +242,27 @@ impl App {
                     self.anim.stop_win();
                 }
                 Event::AutoComplete => self.cue = Cue::Cascade,
-                Event::Changed | Event::GameOver { .. } => {}
+                Event::Changed => {
+                    let result = persist::save_game(self.storage.as_mut(), self.table.game());
+                    self.save_failed = result.is_err();
+                }
+                Event::GameOver {
+                    draw,
+                    score,
+                    won,
+                    moves,
+                } => {
+                    let date = (self.unix_time)();
+                    self.stats.record(GameRecord {
+                        date,
+                        draw,
+                        score,
+                        won,
+                        moves,
+                    });
+                    let result = persist::save_stats(self.storage.as_mut(), &self.stats);
+                    self.save_failed = result.is_err();
+                }
             }
         }
 
@@ -205,6 +311,8 @@ impl App {
         if !apply(&mut self.settings, hit) {
             return;
         }
+        let result = persist::save_settings(self.storage.as_mut(), &self.settings);
+        self.save_failed = result.is_err();
         if self.settings.theme != old_theme {
             let duration = if self.settings.animation == AnimSpeed::Off {
                 0.0
