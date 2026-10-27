@@ -8,6 +8,7 @@ pub mod gesture;
 pub mod hit;
 pub mod layout;
 pub mod render;
+pub mod scene;
 pub mod settings;
 pub mod table;
 pub mod theme;
