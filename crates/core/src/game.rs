@@ -240,7 +240,12 @@ impl Game {
         })
     }
 
-    fn check_transfer(&self, from: PileId, to: PileId, count: u8) -> Result<(), MoveError> {
+    pub(crate) fn check_transfer(
+        &self,
+        from: PileId,
+        to: PileId,
+        count: u8,
+    ) -> Result<(), MoveError> {
         if from == to {
             return Err(MoveError::SamePile);
         }

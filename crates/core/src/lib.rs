@@ -4,12 +4,14 @@
 
 #![forbid(unsafe_code)]
 
+pub mod autocomplete;
 pub mod card;
 pub mod deal;
 pub mod game;
 pub mod moves;
 pub mod pile;
 pub mod score;
+pub mod tap;
 
 pub use card::{Card, Color, Rank, Suit};
 pub use game::{Board, DrawMode, Game};

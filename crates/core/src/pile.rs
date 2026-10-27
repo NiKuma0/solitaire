@@ -35,7 +35,7 @@ impl Column {
     }
 
     /// A column with explicit face-down count, for tests and loading saves.
-    #[cfg(test)]
+    #[cfg_attr(not(test), expect(dead_code, reason = "used by save validation"))]
     pub(crate) fn from_parts(cards: Vec<Card>, face_down: usize) -> Self {
         Self { cards, face_down }
     }
