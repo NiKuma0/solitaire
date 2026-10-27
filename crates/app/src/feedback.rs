@@ -1,6 +1,7 @@
 //! Press feedback: whatever was tapped flashes in the accent and fades (SPEC §7.7).
 
 use crate::anim::ease_out_cubic;
+use crate::dialog::DialogHit;
 use crate::layout::Button;
 use crate::menu::MenuHit;
 
@@ -12,6 +13,7 @@ pub const PRESS_SECONDS: f32 = 0.3;
 pub enum Target {
     Button(Button),
     Menu(MenuHit),
+    Dialog(DialogHit),
 }
 
 /// The last press; one flash at a time.

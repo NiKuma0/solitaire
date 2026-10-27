@@ -4,12 +4,14 @@ use macroquad::math::Vec2;
 use solitaire_core::Game;
 
 use crate::anim::{Animator, Cue};
+use crate::dialog::{self, DialogHit, DialogLayout};
 use crate::feedback::{Feedback, Target};
 use crate::gesture::Gesture;
 use crate::layout::{Button, Insets};
 use crate::menu::{Menu, MenuHit, Row, Tab, apply};
 use crate::persist;
 use crate::picker::{Picker, PickerHit, PickerLayout};
+use crate::reveal::Reveal;
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
 use crate::stats::{GameRecord, Stats};
@@ -72,6 +74,8 @@ pub struct App {
     clock: f64,
     feedback: Feedback,
     picker: Option<Picker>,
+    /// "Start new game?", while it is open or closing.
+    dialog: Option<Reveal>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,6 +184,7 @@ impl App {
             clock: now,
             feedback: Feedback::default(),
             picker: None,
+            dialog: None,
         };
         app.update(screen, now);
         app
@@ -254,11 +259,24 @@ impl App {
         self.picker.as_ref()
     }
 
+    /// The new game dialog, while it is open or closing.
+    #[must_use]
+    pub const fn dialog(&self) -> Option<&Reveal> {
+        self.dialog.as_ref()
+    }
+
     pub fn handle(&mut self, gesture: Gesture, now: f64) {
         if self.menu.is_some() {
             self.handle_menu(gesture, now);
-        } else if self.picker.is_some_and(|p| p.is_open()) {
+        } else if self.picker.is_some_and(|p| p.reveal.is_open()) {
             self.handle_picker(gesture, now);
+        } else if self.dialog.is_some_and(|d| d.is_open()) {
+            self.handle_dialog(gesture, now);
+        } else if let Gesture::Tap(p) = gesture
+            && self.button_at(p) == Some(Button::New)
+        {
+            self.feedback.press(Target::Button(Button::New), now);
+            self.new_game(now);
         } else {
             if let Gesture::Tap(p) = gesture
                 && let Some(&(button, _)) = self
@@ -278,14 +296,14 @@ impl App {
 
     /// Keyboard shortcuts and other direct button presses.
     /// A keyboard shortcut (SPEC §8). Ignored while the menu is open.
-    pub fn shortcut(&mut self, shortcut: Shortcut) {
-        if self.menu.is_some() {
+    pub fn shortcut(&mut self, shortcut: Shortcut, now: f64) {
+        if self.menu.is_some() || self.dialog.is_some_and(|d| d.is_open()) {
             return;
         }
         match shortcut {
             Shortcut::Undo => self.table.press(Button::Undo),
             Shortcut::Redo => self.table.press(Button::Redo),
-            Shortcut::NewGame => self.table.press(Button::New),
+            Shortcut::NewGame => self.new_game(now),
             Shortcut::Draw => self.table.draw_from_stock(),
         }
     }
@@ -347,8 +365,11 @@ impl App {
             }
         }
 
-        if self.picker.is_some_and(|p| p.is_gone(now)) {
+        if self.picker.is_some_and(|p| p.reveal.is_gone(now)) {
             self.picker = None;
+        }
+        if self.dialog.is_some_and(|d| d.is_gone(now)) {
+            self.dialog = None;
         }
 
         let won = self.table.game().is_won();
@@ -415,6 +436,50 @@ impl App {
         }
     }
 
+    fn button_at(&self, p: Vec2) -> Option<Button> {
+        let buttons = &self.table.layout().buttons;
+        buttons.iter().find(|(_, r)| r.contains(p)).map(|&(b, _)| b)
+    }
+
+    /// Deals a new game, first asking if the current one is under way.
+    fn new_game(&mut self, now: f64) {
+        let game = self.table.game();
+        if game.board().moves > 0 && !game.is_won() {
+            self.dialog = Some(Reveal::open(
+                now,
+                self.settings.animation,
+                dialog::OPEN_SECONDS,
+            ));
+        } else {
+            self.table.press(Button::New);
+        }
+    }
+
+    /// Cancel, a tap off the panel or any drag closes the dialog; confirm deals.
+    fn handle_dialog(&mut self, gesture: Gesture, now: f64) {
+        let Some(reveal) = &mut self.dialog else {
+            return;
+        };
+        let Gesture::Tap(p) = gesture else {
+            if matches!(gesture, Gesture::DragStart { .. }) {
+                reveal.close(now);
+            }
+            return;
+        };
+        let hit = DialogLayout::new(self.table.layout()).hit(p);
+        if let Some(h @ (DialogHit::Cancel | DialogHit::Confirm)) = hit {
+            self.feedback.press(Target::Dialog(h), now);
+        }
+        match hit {
+            Some(DialogHit::Panel) => {}
+            Some(DialogHit::Confirm) => {
+                reveal.close(now);
+                self.table.press(Button::New);
+            }
+            Some(DialogHit::Cancel) | None => reveal.close(now),
+        }
+    }
+
     /// Swatches pick a theme, drags scroll them, anything outside closes the picker.
     fn handle_picker(&mut self, gesture: Gesture, now: f64) {
         let layout = PickerLayout::new(self.table.layout());
@@ -434,14 +499,14 @@ impl App {
                     self.change_setting(MenuHit::Choose(Row::Theme, i), now);
                 }
                 Some(PickerHit::Capsule) => {}
-                Some(PickerHit::Button) | None => picker.close(now),
+                Some(PickerHit::Button) | None => picker.reveal.close(now),
             },
             Gesture::DragStart { origin, at } => {
                 if layout.capsule.contains(origin) {
                     picker.drag_anchor = Some((origin.x, picker.scroll));
                     scroll_to(picker, at.x);
                 } else {
-                    picker.close(now);
+                    picker.reveal.close(now);
                 }
             }
             Gesture::DragMove(p) => scroll_to(picker, p.x),

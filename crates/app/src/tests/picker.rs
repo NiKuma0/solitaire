@@ -4,7 +4,6 @@ use macroquad::math::{Rect, vec2};
 
 use super::*;
 use crate::layout::{Button, Insets, Layout};
-use crate::settings::AnimSpeed;
 use crate::test_support::SIZES;
 use crate::theme::ThemeId;
 
@@ -81,36 +80,4 @@ fn hits_inside_the_capsule_between_swatches_are_kept() {
     if p.capsule.contains(inside) && inside.x < p.button.x {
         assert_eq!(p.hit(inside, 0.0), Some(PickerHit::Capsule));
     }
-}
-
-#[test]
-fn opening_and_closing_ease_over_a_third_of_a_second() {
-    let mut picker = Picker::open(1.0, AnimSpeed::Normal);
-    assert_eq!(picker.progress(1.0), 0.0);
-    assert!(picker.progress(1.1) > 0.0 && picker.progress(1.1) < 1.0);
-    assert_eq!(picker.progress(1.0 + f64::from(OPEN_SECONDS)), 1.0);
-    assert!(picker.is_open());
-    picker.close(2.0);
-    assert!(!picker.is_open());
-    assert_eq!(picker.progress(2.0), 1.0);
-    assert!(picker.progress(2.1) < 1.0);
-    assert!(!picker.is_gone(2.1));
-    assert!(picker.is_gone(2.0 + f64::from(OPEN_SECONDS)));
-}
-
-#[test]
-fn closing_halfway_through_opening_starts_from_where_it_was() {
-    let mut picker = Picker::open(1.0, AnimSpeed::Normal);
-    let at = 1.0 + f64::from(OPEN_SECONDS) / 2.0;
-    let shown = picker.progress(at);
-    picker.close(at);
-    assert!((picker.progress(at) - shown).abs() < 1e-5);
-}
-
-#[test]
-fn without_animations_it_opens_and_closes_at_once() {
-    let mut picker = Picker::open(1.0, AnimSpeed::Off);
-    assert_eq!(picker.progress(1.0), 1.0);
-    picker.close(2.0);
-    assert!(picker.is_gone(2.0));
 }

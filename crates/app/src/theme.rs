@@ -123,6 +123,14 @@ impl Palette {
         each_colour!(a, b, m; bg, accent, face, slot, text, ink, red, blue, green, muted, line, track,
             disabled, on, shadow)
     }
+
+    /// Every colour with its opacity scaled by `alpha`, for fading a whole panel.
+    #[must_use]
+    pub fn faded(&self, alpha: f32) -> Self {
+        let f = |c: Color, _: Color| faded(c, alpha);
+        each_colour!(self, self, f; bg, accent, face, slot, text, ink, red, blue, green, muted, line,
+            track, disabled, on, shadow)
+    }
 }
 
 /// Ink for a suit; four-colour mode gives diamonds and clubs their own colours.

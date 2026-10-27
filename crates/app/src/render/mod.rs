@@ -15,6 +15,7 @@ use macroquad::window::clear_background;
 use solitaire_core::PileId;
 
 use crate::app::App;
+use crate::dialog::{self, DialogHit, DialogLayout};
 use crate::feedback::Target;
 use crate::fonts::Fonts;
 use crate::layout::{Button, Layout};
@@ -25,7 +26,7 @@ use crate::table::Table;
 use crate::theme::{Palette, ThemeId, faded, mix, swatch};
 use card::{draw_back, draw_count, draw_face, draw_plate, draw_slot};
 use icon::{Icon, icon_shapes};
-use shapes::{clip_to, fill_shapes, stroke_circle, stroke_rounded};
+use shapes::{clip_to, fill_rounded, fill_shapes, stroke_circle, stroke_rounded};
 use text::{Align, draw_label};
 use widgets::{SELECTED, draw_icon_button, draw_pill};
 
@@ -90,6 +91,9 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
     }
 
     draw_bars(app, now, &ctx);
+    if let Some(reveal) = app.dialog() {
+        draw_dialog(app, reveal.progress(now), now, &ctx);
+    }
     if game.is_won() && !anim.is_animating(now) {
         draw_win(l, board.score, &ctx);
     }
@@ -166,7 +170,9 @@ fn draw_bars(app: &App, now: f64, ctx: &Ctx) {
     let table = app.table();
     let l = table.layout();
     let p = &ctx.palette;
-    let picker = app.picker().map_or(0.0, |picker| picker.progress(now));
+    let picker = app
+        .picker()
+        .map_or(0.0, |picker| picker.reveal.progress(now));
     if picker > 0.0 {
         draw_picker(app, picker, ctx);
     }
@@ -262,6 +268,49 @@ fn draw_picker(app: &App, t: f32, ctx: &Ctx) {
         }
     }
     set_default_camera();
+}
+
+/// The table and bottom bar fade to this opacity under a dialog.
+const DIMMED: f32 = 0.3;
+
+/// "Start new game?" over a faded table; the header stays as it is.
+fn draw_dialog(app: &App, shown: f32, now: f64, ctx: &Ctx) {
+    let l = app.table().layout();
+    let p = &ctx.palette;
+    let top = l.header.bottom();
+    let dim = faded(p.bg, (1.0 - DIMMED) * shown);
+    draw_rectangle(0.0, top, l.screen.x, l.screen.y - top, dim);
+
+    let dl = DialogLayout::new(l);
+    let rise = vec2(0.0, dialog::RISE * (1.0 - shown));
+    let panel_ctx = Ctx {
+        palette: p.faded(shown),
+        fonts: ctx.fonts,
+        settings: ctx.settings,
+        large: ctx.large,
+        card_width: ctx.card_width,
+    };
+    let fp = &panel_ctx.palette;
+    let panel = dl.panel.offset(rise);
+    let radius = panel.h * 0.22;
+    fill_rounded(panel, radius, fp.bg);
+    stroke_rounded(panel, radius, 1.0, fp.line);
+    let font = ctx.fonts.regular.as_ref();
+    draw_label(
+        dialog::MESSAGE,
+        dl.message + rise,
+        16.0,
+        fp.text,
+        Align::Center,
+        font,
+    );
+    for (hit, r, label) in [
+        (DialogHit::Cancel, dl.cancel, "Cancel"),
+        (DialogHit::Confirm, dl.confirm, "New game"),
+    ] {
+        let level = app.feedback(Target::Dialog(hit), now);
+        draw_pill(r.offset(rise), label, level, &panel_ctx);
+    }
 }
 
 const PICKER_DISC: f32 = 20.0;

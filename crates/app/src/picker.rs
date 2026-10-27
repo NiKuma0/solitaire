@@ -2,8 +2,8 @@
 
 use macroquad::math::{Rect, Vec2, vec2};
 
-use crate::anim::ease_out_cubic;
 use crate::layout::{Button, Layout};
+use crate::reveal::Reveal;
 use crate::settings::AnimSpeed;
 use crate::theme::ThemeId;
 
@@ -96,64 +96,17 @@ pub struct Picker {
     pub scroll: f32,
     /// Pointer x and scroll when a drag began.
     pub drag_anchor: Option<(f32, f32)>,
-    opened: f64,
-    closed: Option<f64>,
-    duration: f32,
+    pub reveal: Reveal,
 }
 
 impl Picker {
     #[must_use]
     pub const fn open(now: f64, speed: AnimSpeed) -> Self {
-        let duration = if matches!(speed, AnimSpeed::Off) {
-            0.0
-        } else {
-            OPEN_SECONDS
-        };
         Self {
             scroll: 0.0,
             drag_anchor: None,
-            opened: now,
-            closed: None,
-            duration,
+            reveal: Reveal::open(now, speed, OPEN_SECONDS),
         }
-    }
-
-    /// Starts closing; it stays drawn until `is_gone`.
-    pub fn close(&mut self, now: f64) {
-        if self.closed.is_none() {
-            // Closing mid-opening starts from where the opening got to.
-            // Closing shows 1 - ease(u); pick the u where that equals what is shown now.
-            let shown = self.progress(now);
-            let u = 1.0 - shown.cbrt();
-            self.closed = Some(now - f64::from(u * self.duration));
-        }
-    }
-
-    #[must_use]
-    pub const fn is_open(&self) -> bool {
-        self.closed.is_none()
-    }
-
-    /// 0 (folded into the button) to 1 (fully open).
-    #[must_use]
-    pub fn progress(&self, now: f64) -> f32 {
-        let linear = |since: f64| {
-            if self.duration <= 0.0 {
-                1.0
-            } else {
-                ((now - since) as f32 / self.duration).clamp(0.0, 1.0)
-            }
-        };
-        match self.closed {
-            None => ease_out_cubic(linear(self.opened)),
-            Some(at) => 1.0 - ease_out_cubic(linear(at)),
-        }
-    }
-
-    /// Closed and done animating.
-    #[must_use]
-    pub fn is_gone(&self, now: f64) -> bool {
-        self.closed.is_some() && self.progress(now) <= 0.0
     }
 }
 

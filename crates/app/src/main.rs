@@ -36,7 +36,7 @@ async fn main() {
     loop {
         let now = get_time();
         handle_pointer(&mut app, &mut pointer, now);
-        handle_keys(&mut app);
+        handle_keys(&mut app, now);
         app.update(screen(), now);
         render::draw(&app, &fonts, now);
         next_frame().await;
@@ -65,7 +65,7 @@ fn handle_pointer(app: &mut App, pointer: &mut Recognizer, now: f64) {
     }
 }
 
-fn handle_keys(app: &mut App) {
+fn handle_keys(app: &mut App, now: f64) {
     let ctrl = [
         KeyCode::LeftControl,
         KeyCode::RightControl,
@@ -89,6 +89,6 @@ fn handle_keys(app: &mut App) {
         None
     };
     if let Some(s) = shortcut {
-        app.shortcut(s);
+        app.shortcut(s, now);
     }
 }

@@ -218,3 +218,13 @@ fn swatches_show_a_themes_background_and_accent() {
         assert_eq!(super::swatch(theme), (p.bg, p.accent), "{theme:?}");
     }
 }
+
+#[test]
+fn a_faded_palette_scales_every_opacity() {
+    let p = palette(ThemeId::Dark);
+    let half = p.faded(0.5);
+    assert!((half.text.a - 0.5).abs() < 1e-6);
+    assert!((half.shadow.a - p.shadow.a * 0.5).abs() < 1e-6);
+    assert_eq!(half.text.r, p.text.r);
+    assert_eq!(p.faded(1.0), p);
+}

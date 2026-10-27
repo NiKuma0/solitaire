@@ -4,11 +4,13 @@ use macroquad::math::{Vec2, vec2};
 use solitaire_core::{DrawMode, Game, PileId};
 
 use super::*;
+use crate::dialog::DialogLayout;
 use crate::feedback::Target;
 use crate::gesture::{DRAG_THRESHOLD, Gesture};
 use crate::layout::{Button, Insets};
 use crate::menu::{MenuHit, Row};
 use crate::picker::PickerLayout;
+use crate::reveal::Reveal;
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
 use crate::theme::{ThemeId, palette};
@@ -37,6 +39,16 @@ fn button(a: &App, b: Button) -> Vec2 {
         .find(|(x, _)| *x == b)
         .map(|(_, r)| r.center())
         .expect("button")
+}
+
+/// Taps New and, if asked, confirms.
+fn start_new_game(a: &mut App, now: f64) {
+    let p = button(a, Button::New);
+    tap(a, p, now);
+    if a.dialog().is_some_and(Reveal::is_open) {
+        let confirm = DialogLayout::new(a.table().layout()).confirm.center();
+        tap(a, confirm, now + 0.5);
+    }
 }
 
 fn row_target(a: &App, row: Row, i: usize) -> Vec2 {
@@ -266,8 +278,7 @@ fn finished_games_go_into_saved_statistics() {
     let mut a = App::start(Box::new(MemoryStorage::default()), startup(5, false));
     let stock = a.table().layout().stock.center();
     tap(&mut a, stock, 1.0);
-    let p = button(&a, Button::New);
-    tap(&mut a, p, 2.0);
+    start_new_game(&mut a, 2.0);
     assert_eq!(a.stats().tally(None).played, 1);
     let record = a.stats().history().back().copied().expect("recorded");
     assert_eq!(record.date, 1_700_000_000);
@@ -375,8 +386,7 @@ fn reset_statistics_needs_a_second_tap_soon_after() {
     let mut a = App::start(Box::new(MemoryStorage::default()), startup(31, false));
     let stock = a.table().layout().stock.center();
     tap(&mut a, stock, 1.0);
-    let p = button(&a, Button::New);
-    tap(&mut a, p, 1.5);
+    start_new_game(&mut a, 1.2);
     assert_eq!(a.stats().tally(None).played, 1);
 
     open_menu(&mut a, 2.0);
@@ -407,25 +417,28 @@ fn reset_statistics_needs_a_second_tap_soon_after() {
 fn keyboard_shortcuts_play_the_game() {
     let mut a = app(1280.0, 720.0, Settings::default());
     let fresh = a.table().game().board().clone();
-    a.shortcut(Shortcut::Draw);
+    a.shortcut(Shortcut::Draw, 0.0);
     assert_eq!(a.table().game().board().waste.len(), 1, "Space draws");
-    a.shortcut(Shortcut::Undo);
+    a.shortcut(Shortcut::Undo, 0.0);
     assert_eq!(a.table().game().board(), &fresh);
-    a.shortcut(Shortcut::Redo);
+    a.shortcut(Shortcut::Redo, 0.0);
     assert_eq!(a.table().game().board().waste.len(), 1);
     let seed = a.table().game().seed();
-    a.shortcut(Shortcut::NewGame);
-    assert_ne!(a.table().game().seed(), seed, "N deals a new game");
+    a.shortcut(Shortcut::NewGame, 1.0);
+    assert!(a.dialog().is_some_and(Reveal::is_open), "N asks first");
+    let confirm = DialogLayout::new(a.table().layout()).confirm.center();
+    tap(&mut a, confirm, 2.0);
+    assert_ne!(a.table().game().seed(), seed, "then deals a new game");
 }
 
 #[test]
 fn space_recycles_an_empty_stock() {
     let mut a = app(1280.0, 720.0, Settings::default());
     for _ in 0..24 {
-        a.shortcut(Shortcut::Draw);
+        a.shortcut(Shortcut::Draw, 0.0);
     }
     assert_eq!(a.table().game().board().stock.len(), 0);
-    a.shortcut(Shortcut::Draw);
+    a.shortcut(Shortcut::Draw, 0.0);
     assert_eq!(a.table().game().board().stock.len(), 24);
 }
 
@@ -433,7 +446,7 @@ fn space_recycles_an_empty_stock() {
 fn shortcuts_wait_while_the_menu_is_open() {
     let mut a = app(1280.0, 720.0, Settings::default());
     open_menu(&mut a, 1.0);
-    a.shortcut(Shortcut::Draw);
+    a.shortcut(Shortcut::Draw, 0.0);
     assert_eq!(a.table().game().board().waste.len(), 0);
 }
 
@@ -481,9 +494,9 @@ fn palette_button_opens_and_closes_the_picker() {
     let mut a = app(390.0, 844.0, Settings::default());
     assert!(a.picker().is_none());
     let layout = open_picker(&mut a, 1.0);
-    assert!(a.picker().is_some_and(crate::picker::Picker::is_open));
+    assert!(a.picker().is_some_and(|p| p.reveal.is_open()));
     tap(&mut a, layout.button.center(), 2.0);
-    assert!(a.picker().is_some_and(|p| !p.is_open()), "closing");
+    assert!(a.picker().is_some_and(|p| !p.reveal.is_open()), "closing");
     a.update(a.screen(), 3.0);
     assert!(a.picker().is_none(), "gone after the animation");
 }
@@ -494,7 +507,7 @@ fn tapping_a_swatch_applies_its_theme_and_keeps_the_picker_open() {
     let layout = open_picker(&mut a, 1.0);
     tap(&mut a, layout.swatches[1].center(), 2.0);
     assert_eq!(a.settings().theme, ThemeId::ALL[1]);
-    assert!(a.picker().is_some_and(crate::picker::Picker::is_open));
+    assert!(a.picker().is_some_and(|p| p.reveal.is_open()));
     assert_eq!(a.palette(3.0), palette(ThemeId::ALL[1]));
     let saved: Settings =
         serde_json::from_str(&a.storage().get(persist::SETTINGS_KEY).expect("saved")).unwrap();
@@ -509,7 +522,7 @@ fn tapping_outside_closes_the_picker_without_touching_the_cards() {
     let stock = a.table().layout().stock.center();
     tap(&mut a, stock, 2.0);
     assert_eq!(a.table().game().board(), &before);
-    assert!(a.picker().is_some_and(|p| !p.is_open()));
+    assert!(a.picker().is_some_and(|p| !p.reveal.is_open()));
 }
 
 #[test]
@@ -528,5 +541,63 @@ fn dragging_the_swatches_scrolls_them() {
     a.handle(Gesture::Drop(from - vec2(500.0, 0.0)), 2.2);
     let scroll = a.picker().map(|p| p.scroll).expect("open");
     assert_eq!(scroll, layout.max_scroll(), "clamped");
-    assert!(a.picker().is_some_and(crate::picker::Picker::is_open));
+    assert!(a.picker().is_some_and(|p| p.reveal.is_open()));
+}
+
+#[test]
+fn new_game_asks_first_once_cards_have_moved() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 1.0);
+    let before = a.table().game().board().clone();
+    let p = button(&a, Button::New);
+    tap(&mut a, p, 2.0);
+    assert!(a.dialog().is_some_and(Reveal::is_open));
+    assert_eq!(a.table().game().board(), &before, "nothing dealt yet");
+
+    let d = DialogLayout::new(a.table().layout());
+    tap(&mut a, d.cancel.center(), 3.0);
+    assert!(a.dialog().is_some_and(|d| !d.is_open()));
+    assert_eq!(a.table().game().board(), &before);
+    a.update(a.screen(), 4.0);
+    assert!(a.dialog().is_none(), "gone after the animation");
+
+    tap(&mut a, p, 5.0);
+    tap(&mut a, d.confirm.center(), 6.0);
+    assert_eq!(a.table().game().board().moves, 0, "a fresh deal");
+    assert_ne!(a.table().game().board(), &before);
+}
+
+#[test]
+fn an_untouched_game_is_replaced_without_asking() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let seed = a.table().game().seed();
+    let p = button(&a, Button::New);
+    tap(&mut a, p, 1.0);
+    assert!(a.dialog().is_none());
+    assert_ne!(a.table().game().seed(), seed);
+}
+
+#[test]
+fn tapping_outside_the_dialog_cancels_and_reaches_nothing_else() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 1.0);
+    let p = button(&a, Button::New);
+    tap(&mut a, p, 2.0);
+    let before = a.table().game().board().clone();
+    tap(&mut a, stock, 3.0);
+    assert!(a.dialog().is_some_and(|d| !d.is_open()));
+    assert_eq!(
+        a.table().game().board(),
+        &before,
+        "the stock tap was swallowed"
+    );
+    let panel = DialogLayout::new(a.table().layout()).panel;
+    tap(&mut a, p, 4.0);
+    tap(&mut a, vec2(panel.center().x, panel.y + 4.0), 5.0);
+    assert!(
+        a.dialog().is_some_and(Reveal::is_open),
+        "taps on the panel keep it"
+    );
 }
