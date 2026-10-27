@@ -34,6 +34,8 @@ const MIN_ZONE: f32 = 360.0;
 const EDGE: f32 = 28.0;
 const BUTTON: Vec2 = vec2(64.0, 48.0);
 const WIN_BUTTON: Vec2 = vec2(200.0, 52.0);
+/// The hidden-waste strip fills this share of the gap between waste and stock.
+const STRIP: f32 = 0.5;
 
 /// Player choices that change the geometry.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -107,9 +109,12 @@ pub struct Layout {
     /// Card width and height.
     pub card: Vec2,
     pub stock: Rect,
-    /// Where the bottom visible waste card sits; Draw 3 fans to the right of it.
+    /// The slot beside the stock, where the top waste card sits.
     pub waste: Rect,
+    /// From each visible waste card to the older one under it: away from the stock.
     pub waste_fan: f32,
+    /// How far the strip of hidden waste cards peeks out towards the stock.
+    pub waste_strip: f32,
     pub foundations: [Rect; 4],
     /// The first card of each tableau column.
     pub columns: [Rect; 7],
@@ -193,15 +198,15 @@ impl Layout {
         let (stock, waste, waste_fan, foundations) = if options.left_handed {
             (
                 slot(0, top),
-                slot(2, top),
-                -fan,
+                slot(1, top),
+                fan,
                 [3, 4, 5, 6].map(|i| slot(i, top)),
             )
         } else {
             (
                 slot(6, top),
-                slot(4, top),
-                fan,
+                slot(5, top),
+                -fan,
                 [0, 1, 2, 3].map(|i| slot(i, top)),
             )
         };
@@ -212,6 +217,7 @@ impl Layout {
             stock,
             waste,
             waste_fan,
+            waste_strip: gap * STRIP,
             foundations,
             columns: [0, 1, 2, 3, 4, 5, 6].map(|i| slot(i, tableau_y)),
             tableau_bottom: table.bottom(),
@@ -253,15 +259,32 @@ impl Layout {
         }
     }
 
+    /// The edge of a card peeking out from under the waste, towards the stock,
+    /// while more cards lie under the visible ones.
+    #[must_use]
+    pub fn waste_strip(&self, board: &Board, draw: DrawMode) -> Option<Rect> {
+        if board.waste.len() <= draw.count() {
+            return None;
+        }
+        let w = self.waste_strip;
+        // The fan opens away from the stock, so the stock is on the other side.
+        let x = if self.waste_fan < 0.0 {
+            self.waste.right()
+        } else {
+            self.waste.x - w
+        };
+        Some(Rect::new(x, self.waste.y, w, self.waste.h))
+    }
+
     /// Where card `index` (0 = bottom) of `pile` is drawn.
     #[must_use]
     pub fn card_rect(&self, board: &Board, draw: DrawMode, pile: PileId, index: usize) -> Rect {
         match pile {
             PileId::Stock => self.stock,
             PileId::Waste => {
-                let visible = draw.count();
-                let first_fanned = board.waste.len().saturating_sub(visible);
-                let k = index.saturating_sub(first_fanned);
+                // Steps down from the top card, stopping at the fan's last card.
+                let depth = board.waste.len().saturating_sub(index + 1);
+                let k = depth.min(draw.count() - 1);
                 self.waste.offset(vec2(k as f32 * self.waste_fan, 0.0))
             }
             PileId::Foundation(i) => self

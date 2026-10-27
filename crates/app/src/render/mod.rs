@@ -26,7 +26,7 @@ use crate::scene::{Placement, placements};
 use crate::settings::Settings;
 use crate::table::Table;
 use crate::theme::{Palette, ThemeId, faded, mix, swatch};
-use card::{draw_back, draw_count, draw_face, draw_plate, draw_slot};
+use card::{draw_back, draw_count, draw_face, draw_plate, draw_slot, draw_waste_strip};
 use icon::{Icon, icon_shapes};
 use shapes::{clip_to, fill_rounded, fill_shapes, stroke_circle, stroke_rounded, ui_camera};
 use text::{Align, draw_label};
@@ -179,6 +179,9 @@ fn draw_slots(table: &Table, ctx: &Ctx) {
     }
     for r in l.foundations {
         draw_slot(r, ctx);
+    }
+    if let Some(strip) = l.waste_strip(board, table.game().draw_mode()) {
+        draw_waste_strip(strip, l.waste, ctx);
     }
     for (i, col) in board.tableau.iter().enumerate() {
         if col.is_empty()

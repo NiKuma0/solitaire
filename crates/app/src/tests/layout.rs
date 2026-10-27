@@ -258,27 +258,49 @@ fn card_rects_follow_the_piles() {
     );
 }
 
-#[test]
-fn draw_three_fans_the_top_three_waste_cards() {
-    let l = layout(390.0, 844.0);
-    let board = Board {
-        waste: [Rank::Two, Rank::Three, Rank::Four, Rank::Five]
-            .map(|r| Card::new(r, Suit::Clubs))
-            .to_vec(),
+fn clubs(ranks: &[Rank]) -> Board {
+    Board {
+        waste: ranks.iter().map(|&r| Card::new(r, Suit::Clubs)).collect(),
         ..Board::default()
-    };
+    }
+}
+
+#[test]
+fn the_waste_sits_next_to_the_stock_and_fans_away_from_it() {
+    let l = layout(390.0, 844.0);
+    assert_eq!(l.waste.x, l.columns[5].x, "the slot beside the stock");
+    let board = clubs(&[Rank::Two, Rank::Three, Rank::Four, Rank::Five]);
     let x = |i| l.card_rect(&board, DrawMode::Three, PileId::Waste, i).x;
-    assert_eq!(x(0), l.waste.x);
-    assert_eq!(x(1), l.waste.x);
-    assert!(x(2) > x(1));
-    assert!(x(3) > x(2));
+    assert_eq!(x(3), l.waste.x, "the top card is next to the stock");
     assert!(
-        l.card_rect(&board, DrawMode::Three, PileId::Waste, 3)
-            .right()
-            < l.stock.x
+        x(2) < x(3) && x(1) < x(2),
+        "older cards towards the foundations"
     );
+    assert_eq!(x(0), x(1), "cards under the fan hide under its last card");
+    assert!(x(1) > l.foundations[3].right(), "clear of the foundations");
     let one = |i| l.card_rect(&board, DrawMode::One, PileId::Waste, i).x;
-    assert_eq!(one(3), l.waste.x, "draw one does not fan");
+    assert_eq!(one(0), l.waste.x, "draw one does not fan");
+    assert_eq!(one(3), l.waste.x);
+}
+
+#[test]
+fn a_strip_peeks_out_beside_the_waste_while_cards_are_hidden_under_it() {
+    let l = layout(390.0, 844.0);
+    let one = clubs(&[Rank::Two]);
+    assert_eq!(l.waste_strip(&one, DrawMode::One), None, "nothing under it");
+    let two = clubs(&[Rank::Two, Rank::Three]);
+    let strip = l.waste_strip(&two, DrawMode::One).expect("a card under it");
+    assert!(strip.x > l.waste.right() - 0.01, "on the stock's side");
+    assert!(strip.right() < l.stock.x, "in the gap, not on the stock");
+    assert!(strip.w > 0.0 && (strip.h - l.card.y).abs() < 0.01);
+    let three = clubs(&[Rank::Two, Rank::Three, Rank::Four]);
+    assert_eq!(
+        l.waste_strip(&three, DrawMode::Three),
+        None,
+        "all three show"
+    );
+    let four = clubs(&[Rank::Two, Rank::Three, Rank::Four, Rank::Five]);
+    assert!(l.waste_strip(&four, DrawMode::Three).is_some());
 }
 
 #[test]
@@ -341,18 +363,18 @@ fn left_handed_puts_the_stock_on_the_left() {
     assert!(l.foundations.iter().all(|f| f.x > l.stock.right()));
     assert_eq!(l.foundations[3].x, l.columns[6].x);
 
-    // The Draw 3 fan opens towards the stock and stays clear of it and the foundations.
-    let board = Board {
-        waste: [Rank::Two, Rank::Three, Rank::Four]
-            .map(|r| Card::new(r, Suit::Clubs))
-            .to_vec(),
-        ..Board::default()
-    };
-    let top = l.card_rect(&board, DrawMode::Three, PileId::Waste, 2);
-    let bottom = l.card_rect(&board, DrawMode::Three, PileId::Waste, 0);
-    assert!(top.x < bottom.x, "fans towards the stock");
-    assert!(top.x > l.stock.right());
-    assert!(bottom.right() < l.foundations[0].x);
+    // Mirrored: the waste beside the stock, the fan opening towards the foundations.
+    assert_eq!(l.waste.x, l.columns[1].x);
+    let board = clubs(&[Rank::Two, Rank::Three, Rank::Four, Rank::Five]);
+    let top = l.card_rect(&board, DrawMode::Three, PileId::Waste, 3);
+    let oldest = l.card_rect(&board, DrawMode::Three, PileId::Waste, 1);
+    assert_eq!(top.x, l.waste.x);
+    assert!(oldest.x > top.x, "fans away from the stock");
+    assert!(oldest.right() < l.foundations[0].x);
+    let strip = l
+        .waste_strip(&board, DrawMode::Three)
+        .expect("a hidden card");
+    assert!(strip.x > l.stock.right() && strip.right() < l.waste.x + 0.01);
 }
 
 #[test]
