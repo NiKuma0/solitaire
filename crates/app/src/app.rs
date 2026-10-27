@@ -1,10 +1,10 @@
 //! Ties the table, the screens, the animator and the theme together.
 
-use macroquad::math::Vec2;
+use macroquad::math::{Rect, Vec2, vec2};
 use solitaire_core::Game;
 
 use crate::anim::{Animator, Cue};
-use crate::controls::step;
+use crate::controls::{Selector, Step, step};
 use crate::dialog::{self, DialogHit, DialogLayout};
 use crate::feedback::{Feedback, Target};
 use crate::gesture::Gesture;
@@ -16,7 +16,7 @@ use crate::picker::{Picker, PickerHit, PickerLayout};
 use crate::reveal::Reveal;
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
-use crate::settings_screen::{SettingsHit, SettingsScreen};
+use crate::settings_screen::{Control, SettingsHit, SettingsScreen};
 use crate::stats::{GameRecord, Stats};
 use crate::stats_screen::{FILTERS, StatsScreen};
 use crate::storage::{MemoryStorage, Storage};
@@ -26,6 +26,28 @@ use crate::transition::Transition;
 
 /// Theme crossfade length when animations are on.
 const FADE_SECONDS: f32 = 0.3;
+
+/// Room left around a control scrolled into view for the keyboard focus.
+const FOCUS_MARGIN: f32 = 16.0;
+
+/// Targets that move with a screen's scrolling content (not the header's).
+const fn scrolls(target: Target) -> bool {
+    matches!(target, Target::Settings(_) | Target::Stats(_))
+}
+
+/// A selector's chevrons that lead somewhere, scrolled up by `scroll`.
+fn chevrons(
+    s: &Selector,
+    index: usize,
+    len: usize,
+    scroll: f32,
+    make: impl Fn(Step) -> Target,
+) -> impl Iterator<Item = (Target, Rect)> {
+    [(Step::Prev, s.prev), (Step::Next, s.next)]
+        .into_iter()
+        .filter(move |&(st, _)| step(index, len, st).is_some())
+        .map(move |(st, r)| (make(st), r.offset(vec2(0.0, -scroll))))
+}
 
 /// How long a reset request waits for its confirming tap.
 const CONFIRM_SECONDS: f64 = 3.0;
@@ -70,6 +92,8 @@ pub struct App {
     picker: Option<Picker>,
     /// "Start new game?", while it is open or closing.
     dialog: Option<Reveal>,
+    /// The control the keyboard focus is on; shown only after Tab.
+    focus: Option<Target>,
 }
 
 /// The full-screen views; the picker and dialog sit on top.
@@ -108,6 +132,14 @@ pub enum Shortcut {
     NewGame,
     /// Space: draw from the stock or turn the waste over.
     Draw,
+    /// Esc: close the picker or dialog, or go back a screen.
+    Back,
+    /// Tab: move the keyboard focus forward.
+    Next,
+    /// Shift+Tab: move the keyboard focus back.
+    Previous,
+    /// Enter: press the focused control.
+    Activate,
 }
 
 /// What the app needs from the platform to start.
@@ -210,6 +242,7 @@ impl App {
             feedback: Feedback::default(),
             picker: None,
             dialog: None,
+            focus: None,
         };
         app.update(screen, now);
         app
@@ -280,6 +313,12 @@ impl App {
     }
 
     pub fn handle(&mut self, gesture: Gesture, now: f64) {
+        // Pointer input hides the keyboard focus.
+        self.focus = None;
+        self.route(gesture, now);
+    }
+
+    fn route(&mut self, gesture: Gesture, now: f64) {
         if self.picker.is_some_and(|p| p.reveal.is_open()) {
             self.handle_picker(gesture, now);
         } else if self.dialog.is_some_and(|d| d.is_open()) {
@@ -311,7 +350,16 @@ impl App {
     /// Keyboard shortcuts and other direct button presses.
     /// A keyboard shortcut (SPEC §8). Ignored while the menu is open.
     pub fn shortcut(&mut self, shortcut: Shortcut, now: f64) {
-        if self.view != Screen::Game || self.dialog.is_some_and(|d| d.is_open()) {
+        match shortcut {
+            Shortcut::Back => return self.back(now),
+            Shortcut::Next => return self.move_focus(1),
+            Shortcut::Previous => return self.move_focus(-1),
+            Shortcut::Activate => return self.activate(now),
+            Shortcut::Undo | Shortcut::Redo | Shortcut::NewGame | Shortcut::Draw => {}
+        }
+        let covered = self.picker.is_some_and(|p| p.reveal.is_open())
+            || self.dialog.is_some_and(|d| d.is_open());
+        if self.view != Screen::Game || covered {
             return;
         }
         match shortcut {
@@ -319,7 +367,211 @@ impl App {
             Shortcut::Redo => self.table.press(Button::Redo),
             Shortcut::NewGame => self.new_game(now),
             Shortcut::Draw => self.table.draw_from_stock(),
+            Shortcut::Back | Shortcut::Next | Shortcut::Previous | Shortcut::Activate => {}
         }
+    }
+
+    /// Esc: the picker or dialog closes first, then screens step back towards the game.
+    fn back(&mut self, now: f64) {
+        if let Some(picker) = self.picker.as_mut().filter(|p| p.reveal.is_open()) {
+            picker.reveal.close(now);
+        } else if let Some(dialog) = self.dialog.as_mut().filter(|d| d.is_open()) {
+            dialog.close(now);
+        } else {
+            match self.view {
+                Screen::Settings | Screen::Stats | Screen::About => self.go(Screen::Menu, now),
+                Screen::Menu => self.back_to_game(now),
+                Screen::Game => {}
+            }
+        }
+    }
+
+    /// The mouse is at `p` (`None` when it is not, or on touch screens).
+    pub fn hover(&mut self, p: Option<Vec2>) {
+        let target = p.and_then(|p| self.target_at(p));
+        self.feedback.hover(target);
+    }
+
+    /// Something pressable is under the mouse.
+    #[must_use]
+    pub const fn is_hovering(&self) -> bool {
+        self.feedback.hovered().is_some()
+    }
+
+    /// Mouse wheel: scrolls the current screen by `dy` (down is positive).
+    pub fn wheel(&mut self, dy: f32) {
+        if self.view != Screen::Game {
+            self.scroll = (self.scroll + dy).clamp(0.0, self.max_scroll());
+        }
+    }
+
+    /// The focused control and where its ring goes.
+    #[must_use]
+    pub fn focus(&self) -> Option<(Target, Rect)> {
+        let focus = self.focus?;
+        self.targets().into_iter().find(|(t, _)| *t == focus)
+    }
+
+    fn move_focus(&mut self, by: isize) {
+        let targets = self.targets();
+        let Some(len) = isize::try_from(targets.len()).ok().filter(|&n| n > 0) else {
+            return;
+        };
+        let at = self
+            .focus
+            .and_then(|f| targets.iter().position(|(t, _)| *t == f));
+        let next = match at {
+            Some(i) => (isize::try_from(i).unwrap_or(0) + by).rem_euclid(len),
+            None if by > 0 => 0,
+            None => len - 1,
+        };
+        let Some(&(target, rect)) = usize::try_from(next).ok().and_then(|i| targets.get(i)) else {
+            return;
+        };
+        self.focus = Some(target);
+        self.scroll_into_view(rect);
+    }
+
+    /// Enter: a tap in the middle of the focused control, keeping the focus.
+    fn activate(&mut self, now: f64) {
+        if let Some((target, rect)) = self.focus() {
+            self.route(Gesture::Tap(rect.center()), now);
+            self.focus = Some(target);
+        }
+    }
+
+    /// Scrolls the current screen so `rect` sits inside its viewport.
+    fn scroll_into_view(&mut self, rect: Rect) {
+        let top = self.table.layout().header.bottom();
+        let bottom = self.screen.y;
+        let shift = if rect.y < top {
+            rect.y - top - FOCUS_MARGIN
+        } else if rect.bottom() > bottom {
+            rect.bottom() - bottom + FOCUS_MARGIN
+        } else {
+            0.0
+        };
+        self.scroll = (self.scroll + shift).clamp(0.0, self.max_scroll());
+    }
+
+    /// The pressable thing under `p`, as hover sees it.
+    fn target_at(&self, p: Vec2) -> Option<Target> {
+        let header = self.table.layout().header.bottom();
+        self.targets()
+            .into_iter()
+            .find(|(t, r)| r.contains(p) && (p.y >= header || !scrolls(*t)))
+            .map(|(t, _)| t)
+    }
+
+    /// Everything the keyboard can focus on, in order, where it is now.
+    fn targets(&self) -> Vec<(Target, Rect)> {
+        if let Some(overlay) = self.overlay_targets() {
+            return overlay;
+        }
+        let layout = self.table.layout();
+        let button = |b: Button| {
+            layout
+                .buttons
+                .iter()
+                .find(|(x, _)| *x == b)
+                .map(|&(_, r)| (Target::Button(b), r))
+        };
+        let mut out: Vec<_> = button(Button::Settings).into_iter().collect();
+        match self.view {
+            Screen::Game => {
+                let bar = [
+                    Button::New,
+                    Button::Undo,
+                    Button::Redo,
+                    Button::AutoComplete,
+                ];
+                out.extend(
+                    bar.into_iter()
+                        .filter(|&b| self.table.is_enabled(b))
+                        .filter_map(button),
+                );
+            }
+            Screen::Menu => {
+                let m = MainMenu::new(layout);
+                let draw = usize::from(self.settings.draw == solitaire_core::DrawMode::Three);
+                let hand = usize::from(!self.settings.left_handed);
+                out.extend(chevrons(&m.draw, draw, 2, 0.0, |s| {
+                    Target::Main(MainHit::Draw(s))
+                }));
+                out.extend(chevrons(&m.hand, hand, 2, 0.0, |s| {
+                    Target::Main(MainHit::Hand(s))
+                }));
+                out.extend(
+                    m.items
+                        .map(|(item, r)| (Target::Main(MainHit::Item(item)), r)),
+                );
+            }
+            Screen::Settings => out.extend(self.settings_targets()),
+            Screen::Stats => {
+                let s = StatsScreen::new(layout, self.stats.history().len());
+                let filter = chevrons(
+                    &s.filter,
+                    self.stats_filter,
+                    FILTERS.len(),
+                    self.scroll,
+                    Target::Stats,
+                );
+                out.extend(filter);
+            }
+            Screen::About => {}
+        }
+        out.extend(button(Button::Theme));
+        out
+    }
+
+    /// The open picker's swatches or the dialog's buttons, which take the keyboard over.
+    fn overlay_targets(&self) -> Option<Vec<(Target, Rect)>> {
+        let layout = self.table.layout();
+        if let Some(picker) = self.picker.filter(|p| p.reveal.is_open()) {
+            let pl = PickerLayout::new(layout);
+            let mut out: Vec<_> = pl
+                .swatches
+                .iter()
+                .enumerate()
+                .map(|(i, r)| (i, r.offset(vec2(-picker.scroll, 0.0))))
+                .filter(|(_, r)| r.overlaps(&pl.area))
+                .map(|(i, r)| (Target::Menu(MenuHit::Choose(Row::Theme, i)), r))
+                .collect();
+            out.push((Target::Button(Button::Theme), pl.button));
+            return Some(out);
+        }
+        self.dialog.filter(super::reveal::Reveal::is_open).map(|_| {
+            let d = DialogLayout::new(layout);
+            vec![
+                (Target::Dialog(DialogHit::Cancel), d.cancel),
+                (Target::Dialog(DialogHit::Confirm), d.confirm),
+            ]
+        })
+    }
+
+    /// Each setting's control, scrolled.
+    fn settings_targets(&self) -> Vec<(Target, Rect)> {
+        let up = vec2(0.0, -self.scroll);
+        let mut out = Vec::new();
+        for b in SettingsScreen::new(self.table.layout()).blocks {
+            let row = b.row;
+            match b.control {
+                Control::Toggle(r) => {
+                    out.push((Target::Settings(SettingsHit::Toggle(row)), r.offset(up)));
+                }
+                Control::Button(r) => {
+                    out.push((Target::Settings(SettingsHit::Action(row)), r.offset(up)));
+                }
+                Control::Selector(s) => {
+                    let index = selected(&self.settings, row).unwrap_or(0);
+                    let len = row.options().len();
+                    out.extend(chevrons(&s, index, len, self.scroll, |st| {
+                        Target::Settings(SettingsHit::Step(row, st))
+                    }));
+                }
+            }
+        }
+        out
     }
 
     /// Once per frame, after input: reacts to what changed and syncs animations.

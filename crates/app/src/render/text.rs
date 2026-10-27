@@ -1,5 +1,7 @@
 //! Text drawn at the screen's real resolution so it stays crisp on high-DPI screens.
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use macroquad::color::Color;
 use macroquad::math::Vec2;
 use macroquad::text::{Font, TextParams, draw_text_ex, measure_text};
@@ -13,13 +15,26 @@ pub enum Align {
     Right,
 }
 
+/// The interface scale this frame (`crate::scale`), as `f32` bits.
+static UI_SCALE: AtomicU32 = AtomicU32::new(0x3f80_0000);
+
+/// Set once per frame, before drawing.
+pub fn set_ui_scale(ui: f32) {
+    UI_SCALE.store(ui.to_bits(), Ordering::Relaxed);
+}
+
+#[must_use]
+pub fn ui_scale() -> f32 {
+    f32::from_bits(UI_SCALE.load(Ordering::Relaxed))
+}
+
 /// Pixel size to rasterize glyphs at and the scale that draws them at `size`
-/// logical pixels. All our cameras map logical pixels one to one, so this
-/// only needs the DPI scale (unlike `camera_font_scale`, which assumes a
-/// full-screen camera).
+/// virtual pixels. Our cameras map a virtual pixel to `ui_scale` logical ones,
+/// so glyphs are rasterized at the size they finally appear (unlike
+/// `camera_font_scale`, which assumes a full-screen camera).
 #[must_use]
 pub fn raster_size(size: f32) -> (u16, f32) {
-    let pixels = (size * screen_dpi_scale()).round().max(1.0);
+    let pixels = (size * screen_dpi_scale() * ui_scale()).round().max(1.0);
     (pixels as u16, size / pixels)
 }
 

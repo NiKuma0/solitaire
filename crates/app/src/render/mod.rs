@@ -11,7 +11,6 @@ pub mod suit;
 mod text;
 pub mod widgets;
 
-use macroquad::camera::set_default_camera;
 use macroquad::math::{Rect, Vec2, vec2};
 use macroquad::shapes::{draw_circle, draw_rectangle};
 use macroquad::window::clear_background;
@@ -29,7 +28,7 @@ use crate::table::Table;
 use crate::theme::{Palette, ThemeId, faded, mix, swatch};
 use card::{draw_back, draw_count, draw_face, draw_plate, draw_slot};
 use icon::{Icon, icon_shapes};
-use shapes::{clip_to, fill_rounded, fill_shapes, stroke_circle, stroke_rounded};
+use shapes::{clip_to, fill_rounded, fill_shapes, stroke_circle, stroke_rounded, ui_camera};
 use text::{Align, draw_label};
 use widgets::{SELECTED, draw_icon_button, draw_pill};
 
@@ -44,7 +43,10 @@ pub struct Ctx<'a> {
     pub card_width: f32,
 }
 
-pub fn draw(app: &App, fonts: &Fonts, now: f64) {
+/// Draws a frame; `ui` is the interface scale (`crate::scale`).
+pub fn draw(app: &App, fonts: &Fonts, now: f64, ui: f32) {
+    text::set_ui_scale(ui);
+    shapes::ui_camera();
     let l = app.table().layout();
     let full = Ctx {
         palette: app.palette(now),
@@ -72,7 +74,29 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
         Screen::About => about::draw(app, picker, now, &ctx),
     }
     draw_theme_button(app, picker, now, &full);
+    draw_focus(app, &full);
 }
+
+/// The keyboard focus: an accent ring around the focused control.
+fn draw_focus(app: &App, ctx: &Ctx) {
+    if let Some((_, r)) = app.focus() {
+        let ring = Rect::new(
+            r.x - FOCUS_GAP,
+            r.y - FOCUS_GAP,
+            r.w + 2.0 * FOCUS_GAP,
+            r.h + 2.0 * FOCUS_GAP,
+        );
+        stroke_rounded(
+            ring,
+            ring.w.min(ring.h) / 2.0,
+            FOCUS_WIDTH,
+            ctx.palette.accent,
+        );
+    }
+}
+
+const FOCUS_GAP: f32 = 3.0;
+const FOCUS_WIDTH: f32 = 2.0;
 
 /// Cards, bars, and anything over the table.
 fn draw_game(app: &App, picker: f32, now: f64, ctx: &Ctx) {
@@ -299,7 +323,7 @@ fn draw_picker(app: &App, t: f32, ctx: &Ctx) {
             draw_circle(center.x, center.y, SWATCH_DOT, accent);
         }
     }
-    set_default_camera();
+    ui_camera();
 }
 
 /// The table and bottom bar fade to this opacity under a dialog.

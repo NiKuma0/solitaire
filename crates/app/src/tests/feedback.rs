@@ -43,3 +43,21 @@ fn time_running_backwards_does_not_overflow_the_flash() {
     f.press(UNDO, 2.0);
     assert_eq!(f.level(UNDO, 1.0), 1.0);
 }
+
+#[test]
+fn hovering_lights_a_target_faintly_and_a_press_still_wins() {
+    let mut f = Feedback::default();
+    f.hover(Some(UNDO));
+    assert_eq!(f.level(UNDO, 0.0), HOVER_LEVEL);
+    assert_eq!(f.level(REDO, 0.0), 0.0);
+    f.press(UNDO, 1.0);
+    assert_eq!(f.level(UNDO, 1.0), 1.0);
+    assert_eq!(
+        f.level(UNDO, 9.0),
+        HOVER_LEVEL,
+        "back to hover after the flash"
+    );
+    f.hover(None);
+    assert_eq!(f.level(UNDO, 9.0), 0.0);
+    assert!((HOVER_LEVEL - 0.2).abs() < 1e-6);
+}

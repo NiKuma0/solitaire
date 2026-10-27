@@ -1,11 +1,10 @@
 //! The settings screen.
 
-use macroquad::camera::set_default_camera;
 use macroquad::math::vec2;
 
 use super::Ctx;
 use super::main_menu::draw_back_arrow;
-use super::shapes::clip_to;
+use super::shapes::{clip_to, ui_camera};
 use super::text::{Align, draw_label};
 use super::widgets::{SELECTED, draw_pill, draw_selector, draw_toggle};
 use crate::app::App;
@@ -95,5 +94,5 @@ pub fn draw(app: &App, picker: f32, now: f64, ctx: &Ctx) {
             }
         }
     }
-    set_default_camera();
+    ui_camera();
 }

@@ -749,3 +749,121 @@ fn resizing_keeps_the_settings_scroll_in_range() {
     let max = SettingsScreen::new(a.table().layout()).max_scroll();
     assert!(a.settings_view().scroll <= max, "{max}");
 }
+
+#[test]
+fn escape_closes_whatever_is_on_top_then_goes_back() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    open_picker(&mut a, 1.0);
+    a.shortcut(Shortcut::Back, 2.0);
+    assert!(a.picker().is_some_and(|p| !p.reveal.is_open()));
+
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 3.0);
+    a.shortcut(Shortcut::NewGame, 4.0);
+    assert!(a.dialog().is_some_and(Reveal::is_open));
+    let before = a.table().game().board().clone();
+    a.shortcut(Shortcut::Back, 5.0);
+    assert!(a.dialog().is_some_and(|d| !d.is_open()));
+    assert_eq!(a.table().game().board(), &before, "cancelled");
+
+    open_settings(&mut a, 6.0);
+    a.shortcut(Shortcut::Back, 7.0);
+    assert_eq!(a.view(), Screen::Menu);
+    a.shortcut(Shortcut::Back, 8.0);
+    assert_eq!(a.view(), Screen::Game);
+    a.shortcut(Shortcut::Back, 9.0);
+    assert_eq!(a.view(), Screen::Game, "nowhere further back");
+}
+
+#[test]
+fn hovering_lights_what_the_pointer_is_over() {
+    let mut a = app(1280.0, 720.0, Settings::default());
+    let new = button(&a, Button::New);
+    a.hover(Some(new));
+    assert!(a.is_hovering());
+    assert_eq!(
+        a.feedback(Target::Button(Button::New), 1.0),
+        crate::feedback::HOVER_LEVEL
+    );
+    let redo = button(&a, Button::Redo);
+    a.hover(Some(redo));
+    assert!(!a.is_hovering(), "disabled buttons are not hoverable");
+    a.hover(Some(vec2(5.0, 400.0)));
+    assert!(!a.is_hovering());
+    a.hover(None);
+    assert_eq!(a.feedback(Target::Button(Button::New), 1.0), 0.0);
+}
+
+#[test]
+fn the_wheel_scrolls_long_screens() {
+    let mut a = app(640.0, 360.0, Settings::default());
+    open_settings(&mut a, 1.0);
+    a.wheel(50.0);
+    assert!((a.settings_view().scroll - 50.0).abs() < 0.01);
+    a.wheel(-500.0);
+    assert_eq!(a.settings_view().scroll, 0.0, "clamped at the top");
+    a.wheel(1.0e5);
+    let max = SettingsScreen::new(a.table().layout()).max_scroll();
+    assert_eq!(a.settings_view().scroll, max);
+}
+
+#[test]
+fn tab_moves_focus_and_enter_activates_it() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    assert!(a.focus().is_none(), "no ring until the keyboard is used");
+    open_menu_screen(&mut a, 1.0);
+    a.shortcut(Shortcut::Next, 2.0);
+    let first = a.focus().expect("focused");
+    assert_eq!(
+        first.0,
+        Target::Button(Button::Settings),
+        "back arrow first"
+    );
+    let settings = Target::Main(MainHit::Item(Item::Settings));
+    for _ in 0..20 {
+        if a.focus().is_some_and(|f| f.0 == settings) {
+            break;
+        }
+        a.shortcut(Shortcut::Next, 2.0);
+    }
+    assert_eq!(a.focus().expect("focused").0, settings);
+    a.shortcut(Shortcut::Previous, 2.5);
+    assert_ne!(a.focus().expect("focused").0, settings);
+    a.shortcut(Shortcut::Next, 2.6);
+    a.shortcut(Shortcut::Activate, 3.0);
+    assert_eq!(a.view(), Screen::Settings);
+}
+
+#[test]
+fn focus_scrolls_into_view_and_a_tap_hides_it() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    open_settings(&mut a, 1.0);
+    let reset = Target::Settings(SettingsHit::Action(Row::ResetStats));
+    for _ in 0..30 {
+        if a.focus().is_some_and(|f| f.0 == reset) {
+            break;
+        }
+        a.shortcut(Shortcut::Next, 2.0);
+    }
+    let (_, rect) = a.focus().expect("focused");
+    let view = SettingsScreen::new(a.table().layout()).viewport;
+    assert!(
+        rect.y >= view.y && rect.bottom() <= view.bottom(),
+        "{rect:?}"
+    );
+    tap(&mut a, vec2(5.0, 500.0), 3.0);
+    assert!(a.focus().is_none());
+}
+
+#[test]
+fn the_game_screen_cycles_through_its_buttons() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    let mut seen = Vec::new();
+    for _ in 0..8 {
+        a.shortcut(Shortcut::Next, 1.0);
+        seen.push(a.focus().expect("focused").0);
+    }
+    assert!(seen.contains(&Target::Button(Button::New)));
+    assert!(seen.contains(&Target::Button(Button::Theme)));
+    assert!(!seen.contains(&Target::Button(Button::Redo)), "disabled");
+}

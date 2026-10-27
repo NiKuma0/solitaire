@@ -1,13 +1,12 @@
 //! The statistics screen.
 
-use macroquad::camera::set_default_camera;
 use macroquad::math::{Rect, Vec2, vec2};
 use macroquad::shapes::draw_rectangle;
 use solitaire_core::DrawMode;
 
 use super::Ctx;
 use super::main_menu::draw_back_arrow;
-use super::shapes::clip_to;
+use super::shapes::{clip_to, ui_camera};
 use super::text::{Align, draw_label};
 use super::widgets::draw_selector;
 use crate::app::App;
@@ -102,7 +101,7 @@ pub fn draw(app: &App, picker: f32, now: f64, ctx: &Ctx) {
     }
     let rows: Vec<Rect> = screen.history.iter().map(|r| r.offset(up)).collect();
     draw_history(&rows, stats, ctx);
-    set_default_camera();
+    ui_camera();
 }
 
 /// A bar per recent game, oldest on the left: wins in the accent, losses in the outline colour.

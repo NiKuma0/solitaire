@@ -20,6 +20,7 @@ pub mod persist;
 pub mod picker;
 pub mod render;
 pub mod reveal;
+pub mod scale;
 pub mod scene;
 pub mod settings;
 pub mod settings_screen;
