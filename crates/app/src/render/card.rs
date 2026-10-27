@@ -101,6 +101,17 @@ pub fn draw_count(r: Rect, count: usize, ctx: &Ctx) {
     );
 }
 
+/// The card under the waste, its edge showing in `strip` towards the stock.
+pub fn draw_waste_strip(strip: Rect, waste: Rect, ctx: &Ctx) {
+    let x = if strip.x >= waste.right() {
+        strip.right() - waste.w
+    } else {
+        strip.x
+    };
+    let under = Rect::new(x, waste.y, waste.w, waste.h);
+    fill_rounded(under, radius(under), ctx.palette.accent);
+}
+
 pub fn draw_slot(r: Rect, ctx: &Ctx) {
     stroke_rounded(r, radius(r), 1.0, ctx.palette.slot);
 }

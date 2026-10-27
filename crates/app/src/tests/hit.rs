@@ -87,7 +87,8 @@ fn only_the_top_waste_card_is_hit() {
         })
     );
     let under = visible_center(&l, &board, draw, PileId::Waste, 0, 3);
-    let under = vec2(l.waste.x + 2.0, under.y);
+    let oldest = l.card_rect(&board, draw, PileId::Waste, 0);
+    let under = vec2(oldest.x + 2.0, under.y);
     assert_eq!(spot_at(&l, &board, draw, under), None);
 }
 
