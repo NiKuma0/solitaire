@@ -17,5 +17,8 @@ path = "src/main.rs"
 solitaire-core.workspace = true
 macroquad.workspace = true
 
+[dev-dependencies]
+serde_json = "1.0.154"
+
 [lints]
 workspace = true

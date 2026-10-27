@@ -10,3 +10,17 @@ pub const SIZES: [(f32, f32); 7] = [
     (2560.0, 1440.0),
     (640.0, 360.0),
 ];
+
+use solitaire_core::{Board, DrawMode, Game};
+
+/// A game at an arbitrary (valid) position, built the way a save is loaded.
+pub fn game_from(board: &Board, draw: DrawMode) -> Game {
+    let save = serde_json::json!({
+        "seed": 0,
+        "draw": draw,
+        "board": board,
+        "undo": [],
+        "redo": [],
+    });
+    serde_json::from_value(save).expect("valid position")
+}

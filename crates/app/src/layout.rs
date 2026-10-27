@@ -21,6 +21,7 @@ const TOOLBAR_HEIGHT: f32 = 56.0;
 const BUTTON_HEIGHT: f32 = 44.0;
 const BUTTON_MAX_WIDTH: f32 = 72.0;
 const BUTTON_SPACING: f32 = 6.0;
+const WIN_BUTTON: Vec2 = vec2(200.0, 52.0);
 
 /// Space reserved for notches and system bars.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -58,6 +59,8 @@ pub struct Layout {
     /// Toolbar area left of the buttons, for score and messages.
     pub status: Rect,
     pub buttons: [(Button, Rect); 4],
+    /// "New game" on the win panel, centred on the table.
+    pub win_button: Rect,
 }
 
 impl Layout {
@@ -97,6 +100,13 @@ impl Layout {
         let tableau_y = top + card.y + 2.0 * gap;
 
         let (buttons, status) = toolbar_buttons(toolbar);
+        let win_w = WIN_BUTTON.x.min(table.w - 2.0 * MARGIN);
+        let win_button = Rect::new(
+            table.center().x - win_w / 2.0,
+            table.center().y - WIN_BUTTON.y / 2.0,
+            win_w,
+            WIN_BUTTON.y,
+        );
         Self {
             screen,
             portrait,
@@ -110,6 +120,7 @@ impl Layout {
             toolbar,
             status,
             buttons,
+            win_button,
         }
     }
 

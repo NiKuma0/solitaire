@@ -211,3 +211,13 @@ fn same_size_gives_same_layout() {
     assert_eq!(layout(800.0, 600.0), layout(800.0, 600.0));
     let _: Vec2 = layout(800.0, 600.0).screen;
 }
+
+#[test]
+fn win_button_is_on_screen_and_tappable() {
+    for (w, h) in SIZES {
+        let l = layout(w, h);
+        assert!(inside(screen(w, h), l.win_button), "{w}x{h}");
+        assert!(l.win_button.w >= 44.0 && l.win_button.h >= 44.0);
+        assert!(l.toolbar.intersect(l.win_button).is_none(), "{w}x{h}");
+    }
+}
