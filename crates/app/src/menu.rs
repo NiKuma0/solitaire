@@ -24,7 +24,47 @@ pub enum Row {
     TapToMove,
     LeftHanded,
     LargeCards,
+    Restart,
     ResetStats,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tab {
+    Stats,
+    Settings,
+}
+
+impl Tab {
+    pub const ALL: [Self; 2] = [Self::Stats, Self::Settings];
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Stats => "Stats",
+            Self::Settings => "Settings",
+        }
+    }
+}
+
+/// Rows of game history shown on the stats tab.
+pub const HISTORY_ROWS: usize = 20;
+/// Games in the score chart.
+pub const CHART_GAMES: usize = 30;
+pub const TABLE_ROW: f32 = 28.0;
+pub const FACT_ROW: f32 = 24.0;
+pub const HISTORY_ROW: f32 = 26.0;
+
+/// The stats tab, in screen coordinates at zero scroll.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StatsLayout {
+    /// Header plus Played / Won / Win rate, by draw mode and in total.
+    pub table: Rect,
+    /// Best score and streaks.
+    pub facts: Rect,
+    /// Title line and bars for the last games.
+    pub chart: Rect,
+    pub history_title: Rect,
+    pub history: Vec<Rect>,
 }
 
 enum Control {
@@ -34,7 +74,7 @@ enum Control {
 }
 
 impl Row {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Draw,
         Self::Theme,
         Self::FourColor,
@@ -42,6 +82,7 @@ impl Row {
         Self::TapToMove,
         Self::LeftHanded,
         Self::LargeCards,
+        Self::Restart,
         Self::ResetStats,
     ];
 
@@ -55,6 +96,7 @@ impl Row {
             Self::TapToMove => "Tap to move",
             Self::LeftHanded => "Left-handed layout",
             Self::LargeCards => "Large cards",
+            Self::Restart => "Current deal",
             Self::ResetStats => "Statistics",
         }
     }
@@ -67,6 +109,7 @@ impl Row {
             Self::FourColor | Self::TapToMove | Self::LeftHanded | Self::LargeCards => {
                 Control::Toggle
             }
+            Self::Restart => Control::Action("Restart"),
             Self::ResetStats => Control::Action("Reset"),
         }
     }
@@ -98,6 +141,7 @@ impl Row {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuHit {
     Done,
+    Tab(Tab),
     Choose(Row, usize),
     Toggle(Row),
     Action(Row),
@@ -118,12 +162,15 @@ pub struct Menu {
     pub panel: Rect,
     pub title: Rect,
     pub done: Rect,
+    pub tabs: [(Tab, Rect); 2],
     /// The scrolling part of the panel.
     pub viewport: Rect,
     pub rows: Vec<RowLayout>,
     /// Text block with version, licences and source link.
     pub about: Rect,
-    content_height: f32,
+    pub stats: StatsLayout,
+    settings_height: f32,
+    stats_height: f32,
 }
 
 pub const ABOUT_LINES: [&str; 4] = [
@@ -163,8 +210,9 @@ impl Menu {
             (screen.y - insets.top - insets.bottom - 2.0 * SCREEN_MARGIN).max(TITLE_HEIGHT),
         );
         let width = area.w.min(MAX_PANEL_WIDTH);
-        let (rows, about, content_height) = content(width).unwrap_or_default();
-        let height = (TITLE_HEIGHT + content_height).min(area.h);
+        let (rows, about, settings_height) = content(width).unwrap_or_default();
+        let (stats, stats_height) = stats_content(width).unwrap_or_default();
+        let height = (TITLE_HEIGHT + settings_height.max(stats_height)).min(area.h);
         let panel = Rect::new(
             area.center().x - width / 2.0,
             area.center().y - height / 2.0,
@@ -186,10 +234,18 @@ impl Menu {
         );
         let origin = vec2(panel.x, title.bottom());
         let shift = |r: Rect| r.offset(origin);
+        let mut x = panel.x + PADDING;
+        let tabs = Tab::ALL.map(|tab| {
+            let w = option_width(tab.label());
+            let r = Rect::new(x, done.y, w, TARGET);
+            x += w + 6.0;
+            (tab, r)
+        });
         Self {
             panel,
             title,
             done,
+            tabs,
             viewport,
             rows: rows
                 .into_iter()
@@ -201,22 +257,37 @@ impl Menu {
                 })
                 .collect(),
             about: shift(about),
-            content_height,
+            stats: StatsLayout {
+                table: shift(stats.table),
+                facts: shift(stats.facts),
+                chart: shift(stats.chart),
+                history_title: shift(stats.history_title),
+                history: stats.history.into_iter().map(shift).collect(),
+            },
+            settings_height,
+            stats_height,
         }
     }
 
     #[must_use]
-    pub fn max_scroll(&self) -> f32 {
-        (self.content_height - self.viewport.h).max(0.0)
+    pub fn max_scroll(&self, tab: Tab) -> f32 {
+        let content = match tab {
+            Tab::Stats => self.stats_height,
+            Tab::Settings => self.settings_height,
+        };
+        (content - self.viewport.h).max(0.0)
     }
 
     /// What is under `p` when the rows are scrolled up by `scroll`.
     #[must_use]
-    pub fn hit(&self, p: Vec2, scroll: f32) -> Option<MenuHit> {
+    pub fn hit(&self, p: Vec2, scroll: f32, tab: Tab) -> Option<MenuHit> {
         if self.done.contains(p) {
             return Some(MenuHit::Done);
         }
-        if !self.viewport.contains(p) {
+        if let Some(&(t, _)) = self.tabs.iter().find(|(_, r)| r.contains(p)) {
+            return Some(MenuHit::Tab(t));
+        }
+        if !self.viewport.contains(p) || tab != Tab::Settings {
             return None;
         }
         let q = p + vec2(0.0, scroll);
@@ -386,6 +457,69 @@ fn content(width: f32) -> Result<(Vec<RowLayout>, Rect, f32), taffy::TaffyError>
     Ok((out, about, height))
 }
 
+/// Lays out the stats tab in panel coordinates.
+fn stats_content(width: f32) -> Result<(StatsLayout, f32), taffy::TaffyError> {
+    let mut tree = Tree::new();
+    let inner = width - 2.0 * PADDING;
+    let mut block = |h: f32| tree.new_leaf(fixed(inner, h));
+    let table = block(4.0 * TABLE_ROW)?;
+    let facts = block(3.0 * FACT_ROW)?;
+    let chart = block(130.0)?;
+    let history_title = block(HISTORY_ROW)?;
+    let history: Vec<NodeId> = (0..HISTORY_ROWS)
+        .map(|_| block(HISTORY_ROW))
+        .collect::<Result<_, _>>()?;
+    let mut children = vec![table, facts, chart, history_title];
+    children.extend(&history);
+    let root = tree.new_with_children(
+        Style {
+            flex_direction: FlexDirection::Column,
+            size: Size {
+                width: Dimension::length(width),
+                height: Dimension::auto(),
+            },
+            padding: taffy::Rect {
+                left: px(PADDING),
+                right: px(PADDING),
+                top: px(8.0),
+                bottom: px(PADDING),
+            },
+            ..Style::default()
+        },
+        &children,
+    )?;
+    // Space between blocks, but not between history rows.
+    for node in [facts, chart, history_title] {
+        let mut style = tree.style(node)?.clone();
+        style.margin.top = LengthPercentageAuto::length(16.0);
+        tree.set_style(node, style)?;
+    }
+    tree.compute_layout(
+        root,
+        Size {
+            width: AvailableSpace::Definite(width),
+            height: AvailableSpace::MaxContent,
+        },
+    )?;
+    let rect = |node: NodeId| -> Result<Rect, taffy::TaffyError> {
+        let l = tree.layout(node)?;
+        Ok(Rect::new(
+            l.location.x,
+            l.location.y,
+            l.size.width,
+            l.size.height,
+        ))
+    };
+    let layout = StatsLayout {
+        table: rect(table)?,
+        facts: rect(facts)?,
+        chart: rect(chart)?,
+        history_title: rect(history_title)?,
+        history: history.into_iter().map(rect).collect::<Result<_, _>>()?,
+    };
+    Ok((layout, tree.layout(root)?.size.height))
+}
+
 /// Index of the current option, or 0/1 for toggles; `None` for actions.
 #[must_use]
 pub fn selected(s: &Settings, row: Row) -> Option<usize> {
@@ -399,7 +533,7 @@ pub fn selected(s: &Settings, row: Row) -> Option<usize> {
         Row::TapToMove => usize::from(s.tap_to_move),
         Row::LeftHanded => usize::from(s.left_handed),
         Row::LargeCards => usize::from(s.large_cards),
-        Row::ResetStats => return None,
+        Row::Restart | Row::ResetStats => return None,
     })
 }
 
@@ -428,8 +562,12 @@ pub fn apply(s: &mut Settings, hit: MenuHit) -> bool {
         MenuHit::Toggle(Row::TapToMove) => s.tap_to_move = !s.tap_to_move,
         MenuHit::Toggle(Row::LeftHanded) => s.left_handed = !s.left_handed,
         MenuHit::Toggle(Row::LargeCards) => s.large_cards = !s.large_cards,
-        // Statistics arrive in M4; until then reset does nothing.
-        MenuHit::Action(_) | MenuHit::Done | MenuHit::Choose(..) | MenuHit::Toggle(_) => {}
+        // Actions, tabs and Done are handled by the app, not settings.
+        MenuHit::Action(_)
+        | MenuHit::Tab(_)
+        | MenuHit::Done
+        | MenuHit::Choose(..)
+        | MenuHit::Toggle(_) => {}
     }
     *s != before
 }

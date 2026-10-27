@@ -55,8 +55,8 @@ fn choices_have_one_target_per_option() {
 
 #[test]
 fn short_screens_scroll_tall_ones_do_not() {
-    assert!(menu(640.0, 360.0).max_scroll() > 0.0);
-    assert_eq!(menu(390.0, 844.0).max_scroll(), 0.0);
+    assert!(menu(640.0, 360.0).max_scroll(Tab::Settings) > 0.0);
+    assert_eq!(menu(390.0, 844.0).max_scroll(Tab::Settings), 0.0);
 }
 
 #[test]
@@ -68,18 +68,21 @@ fn hits_follow_the_scroll() {
         .find(|r| r.row == Row::Theme)
         .expect("theme row");
     let target = theme.targets[2].center();
-    assert_eq!(m.hit(target, 0.0), Some(MenuHit::Choose(Row::Theme, 2)));
+    assert_eq!(
+        m.hit(target, 0.0, Tab::Settings),
+        Some(MenuHit::Choose(Row::Theme, 2))
+    );
     let scroll = 30.0;
     assert_eq!(
-        m.hit(target - vec2(0.0, scroll), scroll),
+        m.hit(target - vec2(0.0, scroll), scroll, Tab::Settings),
         Some(MenuHit::Choose(Row::Theme, 2))
     );
     assert_eq!(
-        m.hit(m.done.center(), scroll),
+        m.hit(m.done.center(), scroll, Tab::Settings),
         Some(MenuHit::Done),
         "the title bar does not scroll"
     );
-    assert_eq!(m.hit(vec2(-10.0, -10.0), 0.0), None);
+    assert_eq!(m.hit(vec2(-10.0, -10.0), 0.0, Tab::Settings), None);
 }
 
 #[test]
@@ -92,7 +95,7 @@ fn toggles_can_be_hit_anywhere_on_their_row() {
         .expect("row");
     let left_side = vec2(row.bounds.x + 5.0, row.bounds.center().y);
     assert_eq!(
-        m.hit(left_side, 0.0),
+        m.hit(left_side, 0.0, Tab::Settings),
         Some(MenuHit::Toggle(Row::LargeCards))
     );
 }
@@ -147,4 +150,69 @@ fn current_values_are_reported() {
     assert_eq!(selected(&s, Row::FourColor), Some(1));
     assert_eq!(selected(&s, Row::LargeCards), Some(0));
     assert_eq!(selected(&s, Row::ResetStats), None);
+}
+
+#[test]
+fn tabs_sit_in_the_title_bar_and_switch() {
+    for (w, h) in SIZES {
+        let m = menu(w, h);
+        for (tab, r) in m.tabs {
+            assert!(r.w >= 44.0 && r.h >= 44.0, "{w}x{h} {tab:?}");
+            assert!(r.y >= m.title.y && r.bottom() <= m.title.bottom() + 0.01);
+            assert!(r.intersect(m.done).is_none(), "{w}x{h} tabs overlap Done");
+            assert_eq!(
+                m.hit(r.center(), 0.0, Tab::Settings),
+                Some(MenuHit::Tab(tab))
+            );
+        }
+    }
+}
+
+#[test]
+fn settings_rows_are_inert_on_the_stats_tab() {
+    let m = menu(390.0, 844.0);
+    let row = m
+        .rows
+        .iter()
+        .find(|r| r.row == Row::LargeCards)
+        .expect("row");
+    assert_eq!(m.hit(row.bounds.center(), 0.0, Tab::Stats), None);
+}
+
+#[test]
+fn restart_and_reset_are_actions() {
+    let m = menu(390.0, 844.0);
+    for row in [Row::Restart, Row::ResetStats] {
+        let r = m.rows.iter().find(|x| x.row == row).expect("row");
+        assert_eq!(
+            m.hit(r.targets[0].center(), 0.0, Tab::Settings),
+            Some(MenuHit::Action(row))
+        );
+    }
+}
+
+#[test]
+fn stats_tab_fits_the_panel_and_scrolls_when_tall() {
+    for (w, h) in SIZES {
+        let m = menu(w, h);
+        let s = &m.stats;
+        for r in [s.table, s.facts, s.chart]
+            .into_iter()
+            .chain(s.history.iter().copied())
+        {
+            assert!(within(m.panel, r), "{w}x{h}: {r:?}");
+            assert!(r.h > 0.0);
+        }
+        assert_eq!(s.history.len(), HISTORY_ROWS);
+        assert!(s.table.bottom() <= s.facts.y && s.facts.bottom() <= s.chart.y);
+        assert!(s.chart.bottom() <= s.history[0].y);
+    }
+    assert!(menu(640.0, 360.0).max_scroll(Tab::Stats) > 0.0);
+}
+
+#[test]
+fn both_tabs_share_one_panel() {
+    let m = menu(390.0, 844.0);
+    assert!(m.viewport.h > 0.0);
+    assert!(m.max_scroll(Tab::Stats) >= 0.0 && m.max_scroll(Tab::Settings) >= 0.0);
 }

@@ -66,12 +66,12 @@ pub fn draw(app: &App, fonts: &Fonts, now: f64) {
         }
     }
 
-    draw_toolbar(table, &ctx);
+    draw_toolbar(table, app.save_failed(), &ctx);
     if game.is_won() && !anim.is_animating(now) {
         draw_win(l, board.score, &ctx);
     }
-    if let Some((m, scroll)) = app.menu() {
-        menu::draw(m, scroll, *settings, &ctx);
+    if let Some(view) = app.menu() {
+        menu::draw(view, *settings, app.stats(), &ctx);
     }
 }
 
@@ -114,7 +114,7 @@ fn draw_slots(table: &Table, ctx: &Ctx) {
     }
 }
 
-fn draw_toolbar(table: &Table, ctx: &Ctx) {
+fn draw_toolbar(table: &Table, save_failed: bool, ctx: &Ctx) {
     let l = table.layout();
     let r = l.toolbar;
     let p = &ctx.palette;
@@ -132,7 +132,9 @@ fn draw_toolbar(table: &Table, ctx: &Ctx) {
         Align::Left,
         font,
     );
-    let (second, color) = if table.is_stuck() {
+    let (second, color) = if save_failed {
+        ("Not saved".to_owned(), p.ui_text)
+    } else if table.is_stuck() {
         ("No moves left".to_owned(), p.ui_text)
     } else {
         (format!("Moves {}", board.moves), p.ui_text_dim)

@@ -38,7 +38,8 @@ fn button(a: &App, b: Button) -> Vec2 {
 }
 
 fn row_target(a: &App, row: Row, i: usize) -> Vec2 {
-    let (menu, scroll) = a.menu().expect("menu open");
+    let view = a.menu().expect("menu open");
+    let (menu, scroll) = (view.menu, view.scroll);
     let r = menu.rows.iter().find(|r| r.row == row).expect("row");
     r.targets[i].center() - vec2(0.0, scroll)
 }
@@ -49,7 +50,7 @@ fn settings_button_opens_the_menu_and_done_closes_it() {
     assert!(a.menu().is_none());
     let p = button(&a, Button::Settings);
     tap(&mut a, p, 1.0);
-    let done = a.menu().expect("open").0.done.center();
+    let done = a.menu().expect("open").menu.done.center();
     tap(&mut a, done, 2.0);
     assert!(a.menu().is_none());
 }
@@ -109,7 +110,7 @@ fn menu_changes_reach_the_table() {
     let left_handed = a
         .menu()
         .expect("open")
-        .0
+        .menu
         .rows
         .iter()
         .find(|r| r.row == Row::LeftHanded)
@@ -126,8 +127,8 @@ fn short_screens_scroll_the_menu_by_dragging() {
     let mut a = app(640.0, 360.0, Settings::default());
     let p = button(&a, Button::Settings);
     tap(&mut a, p, 1.0);
-    let (menu, _) = a.menu().expect("open");
-    let max = menu.max_scroll();
+    let menu = a.menu().expect("open").menu;
+    let max = menu.max_scroll(a.menu().expect("open").tab);
     let start = menu.viewport.center();
     a.handle(
         Gesture::DragStart {
@@ -137,12 +138,15 @@ fn short_screens_scroll_the_menu_by_dragging() {
         2.0,
     );
     a.handle(Gesture::DragMove(start - vec2(0.0, 40.0)), 2.1);
-    let scroll = a.menu().expect("open").1;
+    let scroll = a.menu().expect("open").scroll;
     assert!((scroll - 40.0).abs() < 0.01, "{scroll}");
     a.handle(Gesture::DragMove(start - vec2(0.0, 5000.0)), 2.2);
-    assert!((a.menu().expect("open").1 - max).abs() < 0.01, "clamped");
+    assert!(
+        (a.menu().expect("open").scroll - max).abs() < 0.01,
+        "clamped"
+    );
     a.handle(Gesture::Drop(start), 2.3);
-    assert!(a.menu().expect("open").1 >= 0.0);
+    assert!(a.menu().expect("open").scroll >= 0.0);
     // A tap right after still uses the scrolled positions.
     let _ = MenuHit::Done;
 }
@@ -284,7 +288,7 @@ fn settings_changes_are_saved() {
     let large = a
         .menu()
         .expect("open")
-        .0
+        .menu
         .rows
         .iter()
         .find(|r| r.row == Row::LargeCards)
@@ -316,4 +320,83 @@ fn a_failed_save_is_reported_not_fatal() {
     tap(&mut a, stock, 1.0);
     assert!(a.save_failed());
     assert_eq!(a.table().game().board().waste.len(), 1, "the game goes on");
+}
+
+use crate::menu::Tab;
+
+fn open_menu(a: &mut App, now: f64) {
+    let p = button(a, Button::Settings);
+    tap(a, p, now);
+}
+
+fn action(a: &App, row: Row) -> Vec2 {
+    let view = a.menu().expect("open");
+    let r = view.menu.rows.iter().find(|r| r.row == row).expect("row");
+    r.targets[0].center() - vec2(0.0, view.scroll)
+}
+
+#[test]
+fn tabs_switch_and_the_choice_is_remembered() {
+    let mut a = app(390.0, 844.0, Settings::default());
+    open_menu(&mut a, 1.0);
+    assert_eq!(a.menu().expect("open").tab, Tab::Settings);
+    let stats = a.menu().expect("open").menu.tabs[0].1.center();
+    tap(&mut a, stats, 2.0);
+    assert_eq!(a.menu().expect("open").tab, Tab::Stats);
+    assert_eq!(a.menu().expect("open").scroll, 0.0);
+    let done = a.menu().expect("open").menu.done.center();
+    tap(&mut a, done, 3.0);
+    open_menu(&mut a, 4.0);
+    assert_eq!(a.menu().expect("open").tab, Tab::Stats);
+}
+
+#[test]
+fn restart_from_the_menu_redeals_and_closes_it() {
+    let mut a = App::start(Box::new(MemoryStorage::default()), startup(31, false));
+    let fresh = a.table().game().board().clone();
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 1.0);
+    open_menu(&mut a, 2.0);
+    let p = action(&a, Row::Restart);
+    tap(&mut a, p, 3.0);
+    assert!(a.menu().is_none());
+    assert_eq!(a.table().game().board(), &fresh);
+    assert_eq!(
+        a.stats().tally(None).played,
+        1,
+        "the abandoned attempt counts"
+    );
+}
+
+#[test]
+fn reset_statistics_needs_a_second_tap_soon_after() {
+    let mut a = App::start(Box::new(MemoryStorage::default()), startup(31, false));
+    let stock = a.table().layout().stock.center();
+    tap(&mut a, stock, 1.0);
+    let p = button(&a, Button::New);
+    tap(&mut a, p, 1.5);
+    assert_eq!(a.stats().tally(None).played, 1);
+
+    open_menu(&mut a, 2.0);
+    let reset = action(&a, Row::ResetStats);
+    tap(&mut a, reset, 3.0);
+    assert!(a.menu().expect("open").confirm_reset);
+    assert_eq!(a.stats().tally(None).played, 1, "first tap only asks");
+    tap(&mut a, reset, 7.0);
+    assert_eq!(
+        a.stats().tally(None).played,
+        1,
+        "too late: this tap asks again"
+    );
+    tap(&mut a, reset, 8.0);
+    assert_eq!(a.stats().tally(None).played, 0);
+    assert!(!a.menu().expect("open").confirm_reset);
+    let saved = a.storage().get(persist::STATS_KEY).expect("saved");
+    assert_eq!(
+        serde_json::from_str::<crate::stats::Stats>(&saved)
+            .unwrap()
+            .tally(None)
+            .played,
+        0
+    );
 }

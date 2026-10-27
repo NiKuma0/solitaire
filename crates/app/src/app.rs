@@ -6,7 +6,7 @@ use solitaire_core::Game;
 use crate::anim::{Animator, Cue};
 use crate::gesture::Gesture;
 use crate::layout::{Button, Insets};
-use crate::menu::{Menu, MenuHit, apply};
+use crate::menu::{Menu, MenuHit, Row, Tab, apply};
 use crate::persist;
 use crate::scene::placements;
 use crate::settings::{AnimSpeed, Settings};
@@ -21,10 +21,26 @@ const FADE_SECONDS: f32 = 0.3;
 struct MenuState {
     menu: Menu,
     screen: Vec2,
+    tab: Tab,
     scroll: f32,
     /// Pointer y and scroll when the current drag started.
     drag_anchor: Option<(f32, f32)>,
+    /// A first tap on "Reset statistics" asks; a second one before this time resets.
+    confirm_reset_until: Option<f64>,
 }
+
+/// The open menu, for drawing.
+#[derive(Debug, Clone, Copy)]
+pub struct MenuView<'a> {
+    pub menu: &'a Menu,
+    pub tab: Tab,
+    pub scroll: f32,
+    /// "Reset statistics" is waiting for its confirming tap.
+    pub confirm_reset: bool,
+}
+
+/// How long a reset request waits for its confirming tap.
+const CONFIRM_SECONDS: f64 = 3.0;
 
 struct Fade {
     from: Palette,
@@ -49,6 +65,9 @@ pub struct App {
     unix_time: fn() -> u64,
     /// The last attempt to save failed (shown to the player).
     save_failed: bool,
+    /// The menu reopens on the tab it was closed on.
+    last_tab: Tab,
+    clock: f64,
 }
 
 /// What the app needs from the platform to start.
@@ -141,6 +160,8 @@ impl App {
             storage,
             unix_time,
             save_failed: false,
+            last_tab: Tab::Settings,
+            clock: now,
         };
         app.update(screen, now);
         app
@@ -183,8 +204,13 @@ impl App {
 
     /// The open settings screen and how far it is scrolled.
     #[must_use]
-    pub fn menu(&self) -> Option<(&Menu, f32)> {
-        self.menu.as_ref().map(|m| (&m.menu, m.scroll))
+    pub fn menu(&self) -> Option<MenuView<'_>> {
+        self.menu.as_ref().map(|m| MenuView {
+            menu: &m.menu,
+            tab: m.tab,
+            scroll: m.scroll,
+            confirm_reset: m.confirm_reset_until.is_some_and(|t| self.clock < t),
+        })
     }
 
     /// Colours at `now`, mid-crossfade after a theme change.
@@ -223,7 +249,7 @@ impl App {
         {
             m.menu = Menu::new(screen, self.insets);
             m.screen = screen;
-            m.scroll = m.scroll.min(m.menu.max_scroll());
+            m.scroll = m.scroll.min(m.menu.max_scroll(m.tab));
         }
         for event in self.table.drain_events() {
             match event {
@@ -232,8 +258,10 @@ impl App {
                     self.menu = Some(MenuState {
                         menu,
                         screen,
+                        tab: self.last_tab,
                         scroll: 0.0,
                         drag_anchor: None,
+                        confirm_reset_until: None,
                     });
                 }
                 Event::Rejected(card) => self.anim.shake(card, now, self.settings.animation),
@@ -284,10 +312,33 @@ impl App {
     }
 
     fn handle_menu(&mut self, gesture: Gesture, now: f64) {
+        self.clock = now;
         let Some(m) = &mut self.menu else { return };
         match gesture {
-            Gesture::Tap(p) => match m.menu.hit(p, m.scroll) {
-                Some(MenuHit::Done) => self.menu = None,
+            Gesture::Tap(p) => match m.menu.hit(p, m.scroll, m.tab) {
+                Some(MenuHit::Done) => {
+                    self.last_tab = m.tab;
+                    self.menu = None;
+                }
+                Some(MenuHit::Tab(tab)) => {
+                    m.tab = tab;
+                    m.scroll = 0.0;
+                }
+                Some(MenuHit::Action(Row::Restart)) => {
+                    self.last_tab = m.tab;
+                    self.menu = None;
+                    self.table.restart();
+                }
+                Some(MenuHit::Action(Row::ResetStats)) => {
+                    if m.confirm_reset_until.is_some_and(|t| now < t) {
+                        m.confirm_reset_until = None;
+                        self.stats.reset();
+                        let result = persist::save_stats(self.storage.as_mut(), &self.stats);
+                        self.save_failed = result.is_err();
+                    } else {
+                        m.confirm_reset_until = Some(now + CONFIRM_SECONDS);
+                    }
+                }
                 Some(hit) => self.change_setting(hit, now),
                 None => {}
             },
@@ -333,7 +384,7 @@ impl App {
 /// Drags the menu content: moving the pointer up scrolls down.
 fn scroll_to(m: &mut MenuState, y: f32) {
     if let Some((start_y, start_scroll)) = m.drag_anchor {
-        m.scroll = (start_scroll + start_y - y).clamp(0.0, m.menu.max_scroll());
+        m.scroll = (start_scroll + start_y - y).clamp(0.0, m.menu.max_scroll(m.tab));
     }
 }
 
