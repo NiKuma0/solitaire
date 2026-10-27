@@ -5,8 +5,6 @@ name: Release
 on:
   push:
     tags: ["v*"]
-    # TEMPORARY while debugging M5; removed before merging into main.
-    branches: [m5-release]
   workflow_dispatch:
 
 permissions:
@@ -108,10 +106,11 @@ jobs:
       - name: Version
         run: echo "VERSION=$(cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="solitaire-app"))')" >> "$GITHUB_ENV"
       - name: Launcher icons
-        run: cargo run -p solitaire-app --release --locked --example export_icons -- android crates/app/android-res
+        run: cargo run -p solitaire-app --release --locked --example export_icons -- android crates/android/android-res
       - name: Build APK
-        working-directory: crates/app
-        run: cargo quad-apk build --release --nosign -F unsafe-code
+        # A separate edition 2021 crate: cargo-quad-apk injects code that 2024 rejects.
+        working-directory: crates/android
+        run: cargo quad-apk build --release --nosign
       - name: Sign APK
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
@@ -122,7 +121,7 @@ jobs:
           ks="$RUNNER_TEMP/release.p12"
           echo "$KEYSTORE_B64" | base64 -d > "$ks"
           "$tools/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-pass env:KS_PASS --ks-key-alias "$KEY_ALIAS" \
-            --out "solitaire-$VERSION-android.apk" target/android-artifacts/release/apk/solitaire.apk
+            --out "solitaire-$VERSION-android.apk" target/android-artifacts/release/apk/*.apk
           rm -f "$ks"
           "$tools/apksigner" verify --print-certs "solitaire-$VERSION-android.apk" | grep -i "SHA-256"
       - name: Size

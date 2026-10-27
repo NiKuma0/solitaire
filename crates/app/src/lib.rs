@@ -20,6 +20,7 @@ pub mod persist;
 pub mod picker;
 pub mod render;
 pub mod reveal;
+pub mod run;
 pub mod scale;
 pub mod scene;
 pub mod settings;
@@ -31,6 +32,7 @@ pub mod table;
 pub mod theme;
 pub mod transition;
 
+pub use run::run;
 pub use theme::PAGE_HEX;
 
 #[cfg(test)]

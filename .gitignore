@@ -4,7 +4,7 @@
 *.snap.new
 /PROMPT.md
 /.playwright-mcp
-/crates/app/android-res
+/crates/android/android-res
 /frames
 /klondike-reference.html
 /prompt-klondike-design.md
